@@ -1,0 +1,29 @@
+{
+  "name": "forkify",
+  "version": "1.0.0",
+  "description": "Recipe application",
+  "source": "index.html",
+  "scripts": {
+    "start": "parcel",
+    "build": "parcel build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/valeribeizer/forkify.git"
+  },
+  "author": "Valeryia B.",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/valeribeizer/forkify/issues"
+  },
+  "homepage": "https://github.com/valeribeizer/forkify#readme",
+  "devDependencies": {
+    "@parcel/transformer-sass": "^2.8.3",
+    "parcel": "^2.8.3",
+    "process": "^0.11.10"
+  },
+  "dependencies": {
+    "core-js": "^3.29.1",
+    "regenerator-runtime": "^0.13.11"
+  }
+}
