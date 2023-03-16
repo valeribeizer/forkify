@@ -1,14 +1,36 @@
+import { ETIME } from "constants";
 import icons from "url:../../img/icons.svg";
 
 export default class View {
   _data;
 
   render(data) {
-    if (!data || (Array.isArray(data) && data.length === 0)) return this.renderError();
+    if (!data || (Array.isArray(data) && data.length === 0))
+      return this.renderError();
     this._data = data;
     const markup = this._generateMarkUp();
     this._clear();
     this._parentElement.insertAdjacentHTML("afterbegin", markup);
+  }
+
+  update(data) {
+    this._data = data;
+    const newMarkup = this._generateMarkUp();
+
+    const newDOM = document.createRange().createContextualFragment(newMarkup);
+    const newEl = Array.from(newDOM.querySelectorAll("*"));
+    const curEl = Array.from(this._parentElement.querySelectorAll("*"));
+    newEl.forEach((el, i) => {
+      const cur = curEl[i];
+      if (!el.isEqualNode(cur) && el.firstChild?.nodeValue.trim() !== "") {
+        cur.textContent = el.textContent;
+      }
+      if (!el.isEqualNode(cur)) {
+        Array.from(el.attributes).forEach((attr) =>
+          cur.setAttribute(attr.name, attr.value)
+        );
+      }
+    });
   }
 
   _clear() {
