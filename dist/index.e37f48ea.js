@@ -572,6 +572,9 @@ var _paginationViewJs = require("./views/paginationView.js");
 var _paginationViewJsDefault = parcelHelpers.interopDefault(_paginationViewJs);
 var _bookmarksViewJs = require("./views/bookmarksView.js");
 var _bookmarksViewJsDefault = parcelHelpers.interopDefault(_bookmarksViewJs);
+var _addRecipeViewJs = require("./views/addRecipeView.js");
+var _addRecipeViewJsDefault = parcelHelpers.interopDefault(_addRecipeViewJs);
+var _configJs = require("./config.js");
 const { async  } = require("87bc29d241c0a60");
 if (module.hot) module.hot.accept();
 const controlRecipes = async function() {
@@ -627,6 +630,22 @@ const controlAddBookmark = function() {
 const controlBookmarks = function() {
     (0, _bookmarksViewJsDefault.default).render(_modelJs.state.bookmarks);
 };
+const controlAddRecipe = async function(newRecipe) {
+    try {
+        (0, _addRecipeViewJsDefault.default).renderSpinner();
+        await _modelJs.uploadRecipe(newRecipe);
+        (0, _recipeViewJsDefault.default).render(_modelJs.state.recipe);
+        (0, _addRecipeViewJsDefault.default).renderMessage();
+        (0, _bookmarksViewJsDefault.default).render(_modelJs.state.bookmarks);
+        window.history.pushState(null, "", `#${_modelJs.state.recipe.id}`);
+        setTimeout(function() {
+            (0, _addRecipeViewJsDefault.default).toggleWindow();
+        }, (0, _configJs.MODAL_CLOSE_SEC) * 1000);
+    } catch (err) {
+        console.error(err);
+        (0, _addRecipeViewJsDefault.default).renderError(err.message);
+    }
+};
 const init = function() {
     (0, _bookmarksViewJsDefault.default).addHandlerRender(controlBookmarks);
     (0, _recipeViewJsDefault.default).addHandlerRender(controlRecipes);
@@ -634,10 +653,11 @@ const init = function() {
     (0, _recipeViewJsDefault.default).addHandlerAddBookmark(controlAddBookmark);
     (0, _searchViewJsDefault.default).addHandlerSearch(controlSearchResults);
     (0, _paginationViewJsDefault.default).addHandlerClick(controlPagination);
+    (0, _addRecipeViewJsDefault.default).addHandlerUpload(controlAddRecipe);
 };
 init();
 
-},{"87bc29d241c0a60":"dXNgZ","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","core-js/modules/es.regexp.flags.js":"gSXXb","core-js/modules/web.immediate.js":"49tUX","regenerator-runtime/runtime":"dXNgZ","./model.js":"Y4A21","./views/recipeView.js":"l60JC","./views/searchView.js":"9OQAM","./views/resultsView.js":"cSbZE","./views/paginationView.js":"6z7bi","./views/bookmarksView.js":"4Lqzq"}],"dXNgZ":[function(require,module,exports) {
+},{"87bc29d241c0a60":"dXNgZ","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","core-js/modules/es.regexp.flags.js":"gSXXb","core-js/modules/web.immediate.js":"49tUX","regenerator-runtime/runtime":"dXNgZ","./model.js":"Y4A21","./views/recipeView.js":"l60JC","./views/searchView.js":"9OQAM","./views/resultsView.js":"cSbZE","./views/paginationView.js":"6z7bi","./views/bookmarksView.js":"4Lqzq","./views/addRecipeView.js":"i6DNj","./config.js":"k5Hzs"}],"dXNgZ":[function(require,module,exports) {
 /**
  * Copyright (c) 2014-present, Facebook, Inc.
  *
@@ -2653,8 +2673,7 @@ parcelHelpers.export(exports, "getSearchResultPage", ()=>getSearchResultPage);
 parcelHelpers.export(exports, "updateServings", ()=>updateServings);
 parcelHelpers.export(exports, "addBookmark", ()=>addBookmark);
 parcelHelpers.export(exports, "deleteBookmark", ()=>deleteBookmark);
-var _fs = require("fs");
-var _regeneratorRuntime = require("regenerator-runtime");
+parcelHelpers.export(exports, "uploadRecipe", ()=>uploadRecipe);
 var _configJs = require("./config.js");
 var _helpersJs = require("./helpers.js");
 const state = {
@@ -2667,20 +2686,26 @@ const state = {
     },
     bookmarks: []
 };
+const createRecipeObject = function(data) {
+    const { recipe  } = data.data;
+    return {
+        id: recipe.id,
+        title: recipe.title,
+        publisher: recipe.publisher,
+        sourceUrl: recipe.source_url,
+        image: recipe.image_url,
+        servings: recipe.servings,
+        cookingTime: recipe.cooking_time,
+        ingredients: recipe.ingredients,
+        ...recipe.key && {
+            key: recipe.key
+        }
+    };
+};
 const loadRecipe = async function(id) {
     try {
-        const data = await (0, _helpersJs.getJSON)(`${(0, _configJs.API_URL)}${id}`);
-        const { recipe  } = data.data;
-        state.recipe = {
-            id: recipe.id,
-            title: recipe.title,
-            publisher: recipe.publisher,
-            sourceUrl: recipe.source_url,
-            image: recipe.image_url,
-            servings: recipe.servings,
-            cookingTime: recipe.cooking_time,
-            ingredients: recipe.ingredients
-        };
+        const data = await (0, _helpersJs.AJAX)(`${(0, _configJs.API_URL)}${id}?key=${(0, _configJs.KEY)}`);
+        state.recipe = createRecipeObject(data);
         if (state.bookmarks.some((bookmark)=>bookmark.id === id)) state.recipe.bookmarked = true;
         else state.recipe.bookmarked = false;
     } catch (err) {
@@ -2690,13 +2715,16 @@ const loadRecipe = async function(id) {
 const loadSearchResults = async function(query) {
     try {
         state.search.query = query;
-        const data = await (0, _helpersJs.getJSON)(`${(0, _configJs.API_URL)}?search=${query}`);
+        const data = await (0, _helpersJs.AJAX)(`${(0, _configJs.API_URL)}?search=${query}&?key=${(0, _configJs.KEY)}`);
         state.search.results = data.data.recipes.map((rec)=>{
             return {
                 id: rec.id,
                 title: rec.title,
                 publisher: rec.publisher,
-                image: rec.image_url
+                image: rec.image_url,
+                ...rec.key && {
+                    key: rec.key
+                }
             };
         });
         state.search.page = 1;
@@ -2739,21 +2767,54 @@ const init = function() {
     if (storage) state.bookmarks = JSON.parse(storage);
 };
 init();
+const uploadRecipe = async function(newRecipe) {
+    try {
+        const ingredients = Object.entries(newRecipe).filter((entry)=>entry[0].startsWith("ingredient") && entry[1] !== "").map((ing)=>{
+            const ingArr = ing[1].split(",").map((el)=>el.trim());
+            if (ingArr.length !== 3) throw new Error("Wrong format of ingredients!");
+            const [quantity, unit, description] = ingArr;
+            return {
+                quantity: quantity ? +quantity : null,
+                unit,
+                description
+            };
+        });
+        const recipe = {
+            title: newRecipe.title,
+            source_url: newRecipe.sourceUrl,
+            image_url: newRecipe.image,
+            publisher: newRecipe.publisher,
+            cooking_time: +newRecipe.cookingTime,
+            servings: +newRecipe.servings,
+            ingredients
+        };
+        const data = await (0, _helpersJs.AJAX)(`${(0, _configJs.API_URL)}?key=${(0, _configJs.KEY)}`, recipe);
+        state.recipe = createRecipeObject(data);
+        addBookmark(state.recipe);
+    } catch (err) {
+        throw err;
+    }
+};
 
-},{"regenerator-runtime":"dXNgZ","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./config.js":"k5Hzs","./helpers.js":"hGI1E","fs":"jhUEF"}],"k5Hzs":[function(require,module,exports) {
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./config.js":"k5Hzs","./helpers.js":"hGI1E"}],"k5Hzs":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "API_URL", ()=>API_URL);
 parcelHelpers.export(exports, "TIMEOUT_SECOND", ()=>TIMEOUT_SECOND);
 parcelHelpers.export(exports, "RES_PER_PAGE", ()=>RES_PER_PAGE);
+parcelHelpers.export(exports, "KEY", ()=>KEY);
+parcelHelpers.export(exports, "MODAL_CLOSE_SEC", ()=>MODAL_CLOSE_SEC);
 const API_URL = "https://forkify-api.herokuapp.com/api/v2/recipes/";
 const TIMEOUT_SECOND = 10;
 const RES_PER_PAGE = 10;
+const KEY = "01d8ae1a-b803-4739-8373-089baed4571e";
+const MODAL_CLOSE_SEC = 2.5;
 
 },{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"hGI1E":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
-parcelHelpers.export(exports, "getJSON", ()=>getJSON);
+parcelHelpers.export(exports, "AJAX", ()=>AJAX);
+var _regeneratorRuntime = require("regenerator-runtime");
 var _configJs = require("./config.js");
 const timeout = function(s) {
     return new Promise(function(_, reject) {
@@ -2762,10 +2823,17 @@ const timeout = function(s) {
         }, s * 1000);
     });
 };
-const getJSON = async function(url) {
+const AJAX = async function(url, uploadData) {
     try {
+        const fetchPro = uploadData ? fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(uploadData)
+        }) : fetch(url);
         const res = await Promise.race([
-            fetch(url),
+            fetchPro,
             timeout((0, _configJs.TIMEOUT_SECOND))
         ]);
         const data = await res.json();
@@ -2774,12 +2842,36 @@ const getJSON = async function(url) {
     } catch (err) {
         throw err;
     }
-};
+}; // export const getJSON = async function (url) {
+ //   try {
+ //     const fetchPro = fetch(url);
+ //     const res = await Promise.race([fetchPro, timeout(TIMEOUT_SECOND)]);
+ //     const data = await res.json();
+ //     if (!res.ok) throw new Error(`${data.message} (${res.status})`);
+ //     return data;
+ //   } catch (err) {
+ //     throw err;
+ //   }
+ // };
+ // export const sendJSON = async function (url, uploadData) {
+ //   try {
+ //     const fetchPro = fetch(url, {
+ //       method: "POST",
+ //       headers: {
+ //         "Content-Type": "application/json",
+ //       },
+ //       body: JSON.stringify(uploadData),
+ //     });
+ //     const res = await Promise.race([fetchPro, timeout(TIMEOUT_SECOND)]);
+ //     const data = await res.json();
+ //     if (!res.ok) throw new Error(`${data.message} (${res.status})`);
+ //     return data;
+ //   } catch (err) {
+ //     throw err;
+ //   }
+ // };
 
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./config.js":"k5Hzs"}],"jhUEF":[function(require,module,exports) {
-"use strict";
-
-},{}],"l60JC":[function(require,module,exports) {
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./config.js":"k5Hzs","regenerator-runtime":"dXNgZ"}],"l60JC":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 var _iconsSvg = require("url:../../img/icons.svg");
@@ -2850,7 +2942,10 @@ class RecipeView extends (0, _viewJsDefault.default) {
             </div>
           </div>
 
-          <div class="recipe__user-generated">
+          <div class="recipe__user-generated ${this._data.key ? "" : "hidden"}">
+            <svg>
+              <use href="${0, _iconsSvgDefault.default}#icon-user"></use>
+            </svg>
           </div>
           <button class="btn--round btn--bookmark">
             <svg class="">
@@ -3308,6 +3403,8 @@ var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 var _viewJs = require("./view.js");
 var _viewJsDefault = parcelHelpers.interopDefault(_viewJs);
+var _iconsSvg = require("url:../../img/icons.svg");
+var _iconsSvgDefault = parcelHelpers.interopDefault(_iconsSvg);
 class PreviewView extends (0, _viewJsDefault.default) {
     _parentElement = "";
     _generateMarkUp() {
@@ -3321,6 +3418,11 @@ class PreviewView extends (0, _viewJsDefault.default) {
               <div class="preview__data">
                 <h4 class="preview__title">${this._data.title}</h4>
                 <p class="preview__publisher">${this._data.publisher}</p>
+                  <div class="recipe__user-generated ${this._data.key ? "" : "hidden"}">
+                    <svg>
+                     <use href="${0, _iconsSvgDefault.default}#icon-user"></use>
+                    </svg>
+                  </div>
               </div>
             </a>
           </li>
@@ -3329,7 +3431,7 @@ class PreviewView extends (0, _viewJsDefault.default) {
 }
 exports.default = new PreviewView();
 
-},{"./view.js":"bWlJ9","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"6z7bi":[function(require,module,exports) {
+},{"./view.js":"bWlJ9","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","url:../../img/icons.svg":"loVOp"}],"6z7bi":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 var _view = require("./view");
@@ -3408,6 +3510,4888 @@ class BookmarksView extends (0, _viewJsDefault.default) {
 }
 exports.default = new BookmarksView();
 
-},{"./view.js":"bWlJ9","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./previewView.js":"1FDQ6"}]},["d8XZh","aenu9"], "aenu9", "parcelRequire3a11")
+},{"./view.js":"bWlJ9","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./previewView.js":"1FDQ6"}],"i6DNj":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+var _browserslist = require("browserslist");
+var _view = require("./view");
+var _viewDefault = parcelHelpers.interopDefault(_view);
+class AddRecipeView extends (0, _viewDefault.default) {
+    _parentElement = document.querySelector(".upload");
+    _message = "Recipe was successfully uploaded :)";
+    _window = document.querySelector(".add-recipe-window");
+    _overlay = document.querySelector(".overlay");
+    _btnOpenForm = document.querySelector(".nav__btn--add-recipe");
+    _btnCloseForm = document.querySelector(".btn--close-modal");
+    constructor(){
+        super();
+        this._addHandlerShowWindow();
+        this._addHandlerHideWindow();
+    }
+    toggleWindow() {
+        this._overlay.classList.toggle("hidden");
+        this._window.classList.toggle("hidden");
+    }
+    _addHandlerShowWindow() {
+        this._btnOpenForm.addEventListener("click", this.toggleWindow.bind(this));
+    }
+    _addHandlerHideWindow() {
+        this._btnCloseForm.addEventListener("click", this.toggleWindow.bind(this));
+    }
+    addHandlerUpload(handler) {
+        this._parentElement.addEventListener("submit", function(e) {
+            e.preventDefault();
+            const dataArray = [
+                ...new FormData(this)
+            ];
+            const data = Object.fromEntries(dataArray);
+            handler(data);
+        });
+    }
+    _generateMarkUp() {}
+}
+exports.default = new AddRecipeView();
+
+},{"./view":"bWlJ9","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","browserslist":"h32Zo"}],"h32Zo":[function(require,module,exports) {
+var jsReleases = require("2dbbbb0bc07c87c9");
+var agents = require("bf482965d275e354").agents;
+var jsEOL = require("3f437ee999fcc89e");
+var path = require("d610fb3e1f32be4c");
+var e2c = require("4bd56fb766e60c44");
+var BrowserslistError = require("ce5345215222ec0");
+var parse = require("f113e7c12a3ee40e");
+var env = require("d68b08d31de290b6") // Will load browser.js in webpack
+;
+var YEAR = 365.259641 * 86400000;
+var ANDROID_EVERGREEN_FIRST = 37;
+// Helpers
+function isVersionsMatch(versionA, versionB) {
+    return (versionA + ".").indexOf(versionB + ".") === 0;
+}
+function isEolReleased(name) {
+    var version = name.slice(1);
+    return browserslist.nodeVersions.some(function(i) {
+        return isVersionsMatch(i, version);
+    });
+}
+function normalize(versions) {
+    return versions.filter(function(version) {
+        return typeof version === "string";
+    });
+}
+function normalizeElectron(version) {
+    var versionToUse = version;
+    if (version.split(".").length === 3) versionToUse = version.split(".").slice(0, -1).join(".");
+    return versionToUse;
+}
+function nameMapper(name) {
+    return function mapName(version) {
+        return name + " " + version;
+    };
+}
+function getMajor(version) {
+    return parseInt(version.split(".")[0]);
+}
+function getMajorVersions(released, number) {
+    if (released.length === 0) return [];
+    var majorVersions = uniq(released.map(getMajor));
+    var minimum = majorVersions[majorVersions.length - number];
+    if (!minimum) return released;
+    var selected = [];
+    for(var i = released.length - 1; i >= 0; i--){
+        if (minimum > getMajor(released[i])) break;
+        selected.unshift(released[i]);
+    }
+    return selected;
+}
+function uniq(array) {
+    var filtered = [];
+    for(var i = 0; i < array.length; i++)if (filtered.indexOf(array[i]) === -1) filtered.push(array[i]);
+    return filtered;
+}
+function fillUsage(result, name, data) {
+    for(var i in data)result[name + " " + i] = data[i];
+}
+function generateFilter(sign, version) {
+    version = parseFloat(version);
+    if (sign === ">") return function(v) {
+        return parseFloat(v) > version;
+    };
+    else if (sign === ">=") return function(v) {
+        return parseFloat(v) >= version;
+    };
+    else if (sign === "<") return function(v) {
+        return parseFloat(v) < version;
+    };
+    else return function(v) {
+        return parseFloat(v) <= version;
+    };
+}
+function generateSemverFilter(sign, version) {
+    version = version.split(".").map(parseSimpleInt);
+    version[1] = version[1] || 0;
+    version[2] = version[2] || 0;
+    if (sign === ">") return function(v) {
+        v = v.split(".").map(parseSimpleInt);
+        return compareSemver(v, version) > 0;
+    };
+    else if (sign === ">=") return function(v) {
+        v = v.split(".").map(parseSimpleInt);
+        return compareSemver(v, version) >= 0;
+    };
+    else if (sign === "<") return function(v) {
+        v = v.split(".").map(parseSimpleInt);
+        return compareSemver(version, v) > 0;
+    };
+    else return function(v) {
+        v = v.split(".").map(parseSimpleInt);
+        return compareSemver(version, v) >= 0;
+    };
+}
+function parseSimpleInt(x) {
+    return parseInt(x);
+}
+function compare(a, b) {
+    if (a < b) return -1;
+    if (a > b) return 1;
+    return 0;
+}
+function compareSemver(a, b) {
+    return compare(parseInt(a[0]), parseInt(b[0])) || compare(parseInt(a[1] || "0"), parseInt(b[1] || "0")) || compare(parseInt(a[2] || "0"), parseInt(b[2] || "0"));
+}
+// this follows the npm-like semver behavior
+function semverFilterLoose(operator, range) {
+    range = range.split(".").map(parseSimpleInt);
+    if (typeof range[1] === "undefined") range[1] = "x";
+    // ignore any patch version because we only return minor versions
+    // range[2] = 'x'
+    switch(operator){
+        case "<=":
+            return function(version) {
+                version = version.split(".").map(parseSimpleInt);
+                return compareSemverLoose(version, range) <= 0;
+            };
+        case ">=":
+        default:
+            return function(version) {
+                version = version.split(".").map(parseSimpleInt);
+                return compareSemverLoose(version, range) >= 0;
+            };
+    }
+}
+// this follows the npm-like semver behavior
+function compareSemverLoose(version, range) {
+    if (version[0] !== range[0]) return version[0] < range[0] ? -1 : 1;
+    if (range[1] === "x") return 0;
+    if (version[1] !== range[1]) return version[1] < range[1] ? -1 : 1;
+    return 0;
+}
+function resolveVersion(data, version) {
+    if (data.versions.indexOf(version) !== -1) return version;
+    else if (browserslist.versionAliases[data.name][version]) return browserslist.versionAliases[data.name][version];
+    else return false;
+}
+function normalizeVersion(data, version) {
+    var resolved = resolveVersion(data, version);
+    if (resolved) return resolved;
+    else if (data.versions.length === 1) return data.versions[0];
+    else return false;
+}
+function filterByYear(since, context) {
+    since = since / 1000;
+    return Object.keys(agents).reduce(function(selected, name) {
+        var data = byName(name, context);
+        if (!data) return selected;
+        var versions = Object.keys(data.releaseDate).filter(function(v) {
+            var date = data.releaseDate[v];
+            return date !== null && date >= since;
+        });
+        return selected.concat(versions.map(nameMapper(data.name)));
+    }, []);
+}
+function cloneData(data) {
+    return {
+        name: data.name,
+        versions: data.versions,
+        released: data.released,
+        releaseDate: data.releaseDate
+    };
+}
+function mapVersions(data, map) {
+    data.versions = data.versions.map(function(i) {
+        return map[i] || i;
+    });
+    data.released = data.released.map(function(i) {
+        return map[i] || i;
+    });
+    var fixedDate = {};
+    for(var i in data.releaseDate)fixedDate[map[i] || i] = data.releaseDate[i];
+    data.releaseDate = fixedDate;
+    return data;
+}
+function byName(name, context) {
+    name = name.toLowerCase();
+    name = browserslist.aliases[name] || name;
+    if (context.mobileToDesktop && browserslist.desktopNames[name]) {
+        var desktop = browserslist.data[browserslist.desktopNames[name]];
+        if (name === "android") return normalizeAndroidData(cloneData(browserslist.data[name]), desktop);
+        else {
+            var cloned = cloneData(desktop);
+            cloned.name = name;
+            if (name === "op_mob") cloned = mapVersions(cloned, {
+                "10.0-10.1": "10"
+            });
+            return cloned;
+        }
+    }
+    return browserslist.data[name];
+}
+function normalizeAndroidVersions(androidVersions, chromeVersions) {
+    var firstEvergreen = ANDROID_EVERGREEN_FIRST;
+    var last = chromeVersions[chromeVersions.length - 1];
+    return androidVersions.filter(function(version) {
+        return /^(?:[2-4]\.|[34]$)/.test(version);
+    }).concat(chromeVersions.slice(firstEvergreen - last - 1));
+}
+function normalizeAndroidData(android, chrome) {
+    android.released = normalizeAndroidVersions(android.released, chrome.released);
+    android.versions = normalizeAndroidVersions(android.versions, chrome.versions);
+    return android;
+}
+function checkName(name, context) {
+    var data = byName(name, context);
+    if (!data) throw new BrowserslistError("Unknown browser " + name);
+    return data;
+}
+function unknownQuery(query) {
+    return new BrowserslistError("Unknown browser query `" + query + "`. " + "Maybe you are using old Browserslist or made typo in query.");
+}
+function filterAndroid(list, versions, context) {
+    if (context.mobileToDesktop) return list;
+    var released = browserslist.data.android.released;
+    var last = released[released.length - 1];
+    var diff = last - ANDROID_EVERGREEN_FIRST - versions;
+    if (diff > 0) return list.slice(-1);
+    else return list.slice(diff - 1);
+}
+function resolve(queries, context) {
+    return parse(QUERIES, queries).reduce(function(result, node, index) {
+        if (node.not && index === 0) throw new BrowserslistError("Write any browsers query (for instance, `defaults`) before `" + node.query + "`");
+        var type = QUERIES[node.type];
+        var array = type.select.call(browserslist, context, node).map(function(j) {
+            var parts = j.split(" ");
+            if (parts[1] === "0") return parts[0] + " " + byName(parts[0], context).versions[0];
+            else return j;
+        });
+        if (node.compose === "and") {
+            if (node.not) return result.filter(function(j) {
+                return array.indexOf(j) === -1;
+            });
+            else return result.filter(function(j) {
+                return array.indexOf(j) !== -1;
+            });
+        } else {
+            if (node.not) {
+                var filter = {};
+                array.forEach(function(j) {
+                    filter[j] = true;
+                });
+                return result.filter(function(j) {
+                    return !filter[j];
+                });
+            }
+            return result.concat(array);
+        }
+    }, []);
+}
+function prepareOpts(opts) {
+    if (typeof opts === "undefined") opts = {};
+    if (typeof opts.path === "undefined") opts.path = path.resolve ? path.resolve(".") : ".";
+    return opts;
+}
+function prepareQueries(queries, opts) {
+    if (typeof queries === "undefined" || queries === null) {
+        var config = browserslist.loadConfig(opts);
+        if (config) queries = config;
+        else queries = browserslist.defaults;
+    }
+    return queries;
+}
+function checkQueries(queries) {
+    if (!(typeof queries === "string" || Array.isArray(queries))) throw new BrowserslistError("Browser queries must be an array or string. Got " + typeof queries + ".");
+}
+var cache = {};
+function browserslist(queries, opts) {
+    opts = prepareOpts(opts);
+    queries = prepareQueries(queries, opts);
+    checkQueries(queries);
+    var context = {
+        ignoreUnknownVersions: opts.ignoreUnknownVersions,
+        dangerousExtend: opts.dangerousExtend,
+        mobileToDesktop: opts.mobileToDesktop,
+        path: opts.path,
+        env: opts.env
+    };
+    env.oldDataWarning(browserslist.data);
+    var stats = env.getStat(opts, browserslist.data);
+    if (stats) {
+        context.customUsage = {};
+        for(var browser in stats)fillUsage(context.customUsage, browser, stats[browser]);
+    }
+    var cacheKey = JSON.stringify([
+        queries,
+        context
+    ]);
+    if (cache[cacheKey]) return cache[cacheKey];
+    var result = uniq(resolve(queries, context)).sort(function(name1, name2) {
+        name1 = name1.split(" ");
+        name2 = name2.split(" ");
+        if (name1[0] === name2[0]) {
+            // assumptions on caniuse data
+            // 1) version ranges never overlaps
+            // 2) if version is not a range, it never contains `-`
+            var version1 = name1[1].split("-")[0];
+            var version2 = name2[1].split("-")[0];
+            return compareSemver(version2.split("."), version1.split("."));
+        } else return compare(name1[0], name2[0]);
+    });
+    if (!env.env.BROWSERSLIST_DISABLE_CACHE) cache[cacheKey] = result;
+    return result;
+}
+browserslist.parse = function(queries, opts) {
+    opts = prepareOpts(opts);
+    queries = prepareQueries(queries, opts);
+    checkQueries(queries);
+    return parse(QUERIES, queries);
+};
+// Will be filled by Can I Use data below
+browserslist.cache = {};
+browserslist.data = {};
+browserslist.usage = {
+    global: {},
+    custom: null
+};
+// Default browsers query
+browserslist.defaults = [
+    "> 0.5%",
+    "last 2 versions",
+    "Firefox ESR",
+    "not dead"
+];
+// Browser names aliases
+browserslist.aliases = {
+    fx: "firefox",
+    ff: "firefox",
+    ios: "ios_saf",
+    explorer: "ie",
+    blackberry: "bb",
+    explorermobile: "ie_mob",
+    operamini: "op_mini",
+    operamobile: "op_mob",
+    chromeandroid: "and_chr",
+    firefoxandroid: "and_ff",
+    ucandroid: "and_uc",
+    qqandroid: "and_qq"
+};
+// Can I Use only provides a few versions for some browsers (e.g. and_chr).
+// Fallback to a similar browser for unknown versions
+browserslist.desktopNames = {
+    and_chr: "chrome",
+    and_ff: "firefox",
+    ie_mob: "ie",
+    op_mob: "opera",
+    android: "chrome" // has extra processing logic
+};
+// Aliases to work with joined versions like `ios_saf 7.0-7.1`
+browserslist.versionAliases = {};
+browserslist.clearCaches = env.clearCaches;
+browserslist.parseConfig = env.parseConfig;
+browserslist.readConfig = env.readConfig;
+browserslist.findConfig = env.findConfig;
+browserslist.loadConfig = env.loadConfig;
+browserslist.coverage = function(browsers, stats) {
+    var data;
+    if (typeof stats === "undefined") data = browserslist.usage.global;
+    else if (stats === "my stats") {
+        var opts = {};
+        opts.path = path.resolve ? path.resolve(".") : ".";
+        var customStats = env.getStat(opts);
+        if (!customStats) throw new BrowserslistError("Custom usage statistics was not provided");
+        data = {};
+        for(var browser in customStats)fillUsage(data, browser, customStats[browser]);
+    } else if (typeof stats === "string") {
+        if (stats.length > 2) stats = stats.toLowerCase();
+        else stats = stats.toUpperCase();
+        env.loadCountry(browserslist.usage, stats, browserslist.data);
+        data = browserslist.usage[stats];
+    } else {
+        if ("dataByBrowser" in stats) stats = stats.dataByBrowser;
+        data = {};
+        for(var name in stats)for(var version in stats[name])data[name + " " + version] = stats[name][version];
+    }
+    return browsers.reduce(function(all, i) {
+        var usage = data[i];
+        if (usage === undefined) usage = data[i.replace(/ \S+$/, " 0")];
+        return all + (usage || 0);
+    }, 0);
+};
+function nodeQuery(context, node) {
+    var matched = browserslist.nodeVersions.filter(function(i) {
+        return isVersionsMatch(i, node.version);
+    });
+    if (matched.length === 0) {
+        if (context.ignoreUnknownVersions) return [];
+        else throw new BrowserslistError("Unknown version " + node.version + " of Node.js");
+    }
+    return [
+        "node " + matched[matched.length - 1]
+    ];
+}
+function sinceQuery(context, node) {
+    var year = parseInt(node.year);
+    var month = parseInt(node.month || "01") - 1;
+    var day = parseInt(node.day || "01");
+    return filterByYear(Date.UTC(year, month, day, 0, 0, 0), context);
+}
+function coverQuery(context, node) {
+    var coverage = parseFloat(node.coverage);
+    var usage = browserslist.usage.global;
+    if (node.place) {
+        if (node.place.match(/^my\s+stats$/i)) {
+            if (!context.customUsage) throw new BrowserslistError("Custom usage statistics was not provided");
+            usage = context.customUsage;
+        } else {
+            var place;
+            if (node.place.length === 2) place = node.place.toUpperCase();
+            else place = node.place.toLowerCase();
+            env.loadCountry(browserslist.usage, place, browserslist.data);
+            usage = browserslist.usage[place];
+        }
+    }
+    var versions = Object.keys(usage).sort(function(a, b) {
+        return usage[b] - usage[a];
+    });
+    var coveraged = 0;
+    var result = [];
+    var version;
+    for(var i = 0; i < versions.length; i++){
+        version = versions[i];
+        if (usage[version] === 0) break;
+        coveraged += usage[version];
+        result.push(version);
+        if (coveraged >= coverage) break;
+    }
+    return result;
+}
+var QUERIES = {
+    last_major_versions: {
+        matches: [
+            "versions"
+        ],
+        regexp: /^last\s+(\d+)\s+major\s+versions?$/i,
+        select: function(context, node) {
+            return Object.keys(agents).reduce(function(selected, name) {
+                var data = byName(name, context);
+                if (!data) return selected;
+                var list = getMajorVersions(data.released, node.versions);
+                list = list.map(nameMapper(data.name));
+                if (data.name === "android") list = filterAndroid(list, node.versions, context);
+                return selected.concat(list);
+            }, []);
+        }
+    },
+    last_versions: {
+        matches: [
+            "versions"
+        ],
+        regexp: /^last\s+(\d+)\s+versions?$/i,
+        select: function(context, node) {
+            return Object.keys(agents).reduce(function(selected, name) {
+                var data = byName(name, context);
+                if (!data) return selected;
+                var list = data.released.slice(-node.versions);
+                list = list.map(nameMapper(data.name));
+                if (data.name === "android") list = filterAndroid(list, node.versions, context);
+                return selected.concat(list);
+            }, []);
+        }
+    },
+    last_electron_major_versions: {
+        matches: [
+            "versions"
+        ],
+        regexp: /^last\s+(\d+)\s+electron\s+major\s+versions?$/i,
+        select: function(context, node) {
+            var validVersions = getMajorVersions(Object.keys(e2c), node.versions);
+            return validVersions.map(function(i) {
+                return "chrome " + e2c[i];
+            });
+        }
+    },
+    last_node_major_versions: {
+        matches: [
+            "versions"
+        ],
+        regexp: /^last\s+(\d+)\s+node\s+major\s+versions?$/i,
+        select: function(context, node) {
+            return getMajorVersions(browserslist.nodeVersions, node.versions).map(function(version) {
+                return "node " + version;
+            });
+        }
+    },
+    last_browser_major_versions: {
+        matches: [
+            "versions",
+            "browser"
+        ],
+        regexp: /^last\s+(\d+)\s+(\w+)\s+major\s+versions?$/i,
+        select: function(context, node) {
+            var data = checkName(node.browser, context);
+            var validVersions = getMajorVersions(data.released, node.versions);
+            var list = validVersions.map(nameMapper(data.name));
+            if (data.name === "android") list = filterAndroid(list, node.versions, context);
+            return list;
+        }
+    },
+    last_electron_versions: {
+        matches: [
+            "versions"
+        ],
+        regexp: /^last\s+(\d+)\s+electron\s+versions?$/i,
+        select: function(context, node) {
+            return Object.keys(e2c).slice(-node.versions).map(function(i) {
+                return "chrome " + e2c[i];
+            });
+        }
+    },
+    last_node_versions: {
+        matches: [
+            "versions"
+        ],
+        regexp: /^last\s+(\d+)\s+node\s+versions?$/i,
+        select: function(context, node) {
+            return browserslist.nodeVersions.slice(-node.versions).map(function(version) {
+                return "node " + version;
+            });
+        }
+    },
+    last_browser_versions: {
+        matches: [
+            "versions",
+            "browser"
+        ],
+        regexp: /^last\s+(\d+)\s+(\w+)\s+versions?$/i,
+        select: function(context, node) {
+            var data = checkName(node.browser, context);
+            var list = data.released.slice(-node.versions).map(nameMapper(data.name));
+            if (data.name === "android") list = filterAndroid(list, node.versions, context);
+            return list;
+        }
+    },
+    unreleased_versions: {
+        matches: [],
+        regexp: /^unreleased\s+versions$/i,
+        select: function(context) {
+            return Object.keys(agents).reduce(function(selected, name) {
+                var data = byName(name, context);
+                if (!data) return selected;
+                var list = data.versions.filter(function(v) {
+                    return data.released.indexOf(v) === -1;
+                });
+                list = list.map(nameMapper(data.name));
+                return selected.concat(list);
+            }, []);
+        }
+    },
+    unreleased_electron_versions: {
+        matches: [],
+        regexp: /^unreleased\s+electron\s+versions?$/i,
+        select: function() {
+            return [];
+        }
+    },
+    unreleased_browser_versions: {
+        matches: [
+            "browser"
+        ],
+        regexp: /^unreleased\s+(\w+)\s+versions?$/i,
+        select: function(context, node) {
+            var data = checkName(node.browser, context);
+            return data.versions.filter(function(v) {
+                return data.released.indexOf(v) === -1;
+            }).map(nameMapper(data.name));
+        }
+    },
+    last_years: {
+        matches: [
+            "years"
+        ],
+        regexp: /^last\s+(\d*.?\d+)\s+years?$/i,
+        select: function(context, node) {
+            return filterByYear(Date.now() - YEAR * node.years, context);
+        }
+    },
+    since_y: {
+        matches: [
+            "year"
+        ],
+        regexp: /^since (\d+)$/i,
+        select: sinceQuery
+    },
+    since_y_m: {
+        matches: [
+            "year",
+            "month"
+        ],
+        regexp: /^since (\d+)-(\d+)$/i,
+        select: sinceQuery
+    },
+    since_y_m_d: {
+        matches: [
+            "year",
+            "month",
+            "day"
+        ],
+        regexp: /^since (\d+)-(\d+)-(\d+)$/i,
+        select: sinceQuery
+    },
+    popularity: {
+        matches: [
+            "sign",
+            "popularity"
+        ],
+        regexp: /^(>=?|<=?)\s*(\d+|\d+\.\d+|\.\d+)%$/,
+        select: function(context, node) {
+            var popularity = parseFloat(node.popularity);
+            var usage = browserslist.usage.global;
+            return Object.keys(usage).reduce(function(result, version) {
+                if (node.sign === ">") {
+                    if (usage[version] > popularity) result.push(version);
+                } else if (node.sign === "<") {
+                    if (usage[version] < popularity) result.push(version);
+                } else if (node.sign === "<=") {
+                    if (usage[version] <= popularity) result.push(version);
+                } else if (usage[version] >= popularity) result.push(version);
+                return result;
+            }, []);
+        }
+    },
+    popularity_in_my_stats: {
+        matches: [
+            "sign",
+            "popularity"
+        ],
+        regexp: /^(>=?|<=?)\s*(\d+|\d+\.\d+|\.\d+)%\s+in\s+my\s+stats$/,
+        select: function(context, node) {
+            var popularity = parseFloat(node.popularity);
+            if (!context.customUsage) throw new BrowserslistError("Custom usage statistics was not provided");
+            var usage = context.customUsage;
+            return Object.keys(usage).reduce(function(result, version) {
+                var percentage = usage[version];
+                if (percentage == null) return result;
+                if (node.sign === ">") {
+                    if (percentage > popularity) result.push(version);
+                } else if (node.sign === "<") {
+                    if (percentage < popularity) result.push(version);
+                } else if (node.sign === "<=") {
+                    if (percentage <= popularity) result.push(version);
+                } else if (percentage >= popularity) result.push(version);
+                return result;
+            }, []);
+        }
+    },
+    popularity_in_config_stats: {
+        matches: [
+            "sign",
+            "popularity",
+            "config"
+        ],
+        regexp: /^(>=?|<=?)\s*(\d+|\d+\.\d+|\.\d+)%\s+in\s+(\S+)\s+stats$/,
+        select: function(context, node) {
+            var popularity = parseFloat(node.popularity);
+            var stats = env.loadStat(context, node.config, browserslist.data);
+            if (stats) {
+                context.customUsage = {};
+                for(var browser in stats)fillUsage(context.customUsage, browser, stats[browser]);
+            }
+            if (!context.customUsage) throw new BrowserslistError("Custom usage statistics was not provided");
+            var usage = context.customUsage;
+            return Object.keys(usage).reduce(function(result, version) {
+                var percentage = usage[version];
+                if (percentage == null) return result;
+                if (node.sign === ">") {
+                    if (percentage > popularity) result.push(version);
+                } else if (node.sign === "<") {
+                    if (percentage < popularity) result.push(version);
+                } else if (node.sign === "<=") {
+                    if (percentage <= popularity) result.push(version);
+                } else if (percentage >= popularity) result.push(version);
+                return result;
+            }, []);
+        }
+    },
+    popularity_in_place: {
+        matches: [
+            "sign",
+            "popularity",
+            "place"
+        ],
+        regexp: /^(>=?|<=?)\s*(\d+|\d+\.\d+|\.\d+)%\s+in\s+((alt-)?\w\w)$/,
+        select: function(context, node) {
+            var popularity = parseFloat(node.popularity);
+            var place = node.place;
+            if (place.length === 2) place = place.toUpperCase();
+            else place = place.toLowerCase();
+            env.loadCountry(browserslist.usage, place, browserslist.data);
+            var usage = browserslist.usage[place];
+            return Object.keys(usage).reduce(function(result, version) {
+                var percentage = usage[version];
+                if (percentage == null) return result;
+                if (node.sign === ">") {
+                    if (percentage > popularity) result.push(version);
+                } else if (node.sign === "<") {
+                    if (percentage < popularity) result.push(version);
+                } else if (node.sign === "<=") {
+                    if (percentage <= popularity) result.push(version);
+                } else if (percentage >= popularity) result.push(version);
+                return result;
+            }, []);
+        }
+    },
+    cover: {
+        matches: [
+            "coverage"
+        ],
+        regexp: /^cover\s+(\d+|\d+\.\d+|\.\d+)%$/i,
+        select: coverQuery
+    },
+    cover_in: {
+        matches: [
+            "coverage",
+            "place"
+        ],
+        regexp: /^cover\s+(\d+|\d+\.\d+|\.\d+)%\s+in\s+(my\s+stats|(alt-)?\w\w)$/i,
+        select: coverQuery
+    },
+    supports: {
+        matches: [
+            "feature"
+        ],
+        regexp: /^supports\s+([\w-]+)$/,
+        select: function(context, node) {
+            env.loadFeature(browserslist.cache, node.feature);
+            var features = browserslist.cache[node.feature];
+            return Object.keys(features).reduce(function(result, version) {
+                var flags = features[version];
+                if (flags.indexOf("y") >= 0 || flags.indexOf("a") >= 0) result.push(version);
+                return result;
+            }, []);
+        }
+    },
+    electron_range: {
+        matches: [
+            "from",
+            "to"
+        ],
+        regexp: /^electron\s+([\d.]+)\s*-\s*([\d.]+)$/i,
+        select: function(context, node) {
+            var fromToUse = normalizeElectron(node.from);
+            var toToUse = normalizeElectron(node.to);
+            var from = parseFloat(node.from);
+            var to = parseFloat(node.to);
+            if (!e2c[fromToUse]) throw new BrowserslistError("Unknown version " + from + " of electron");
+            if (!e2c[toToUse]) throw new BrowserslistError("Unknown version " + to + " of electron");
+            return Object.keys(e2c).filter(function(i) {
+                var parsed = parseFloat(i);
+                return parsed >= from && parsed <= to;
+            }).map(function(i) {
+                return "chrome " + e2c[i];
+            });
+        }
+    },
+    node_range: {
+        matches: [
+            "from",
+            "to"
+        ],
+        regexp: /^node\s+([\d.]+)\s*-\s*([\d.]+)$/i,
+        select: function(context, node) {
+            return browserslist.nodeVersions.filter(semverFilterLoose(">=", node.from)).filter(semverFilterLoose("<=", node.to)).map(function(v) {
+                return "node " + v;
+            });
+        }
+    },
+    browser_range: {
+        matches: [
+            "browser",
+            "from",
+            "to"
+        ],
+        regexp: /^(\w+)\s+([\d.]+)\s*-\s*([\d.]+)$/i,
+        select: function(context, node) {
+            var data = checkName(node.browser, context);
+            var from = parseFloat(normalizeVersion(data, node.from) || node.from);
+            var to = parseFloat(normalizeVersion(data, node.to) || node.to);
+            function filter(v) {
+                var parsed = parseFloat(v);
+                return parsed >= from && parsed <= to;
+            }
+            return data.released.filter(filter).map(nameMapper(data.name));
+        }
+    },
+    electron_ray: {
+        matches: [
+            "sign",
+            "version"
+        ],
+        regexp: /^electron\s*(>=?|<=?)\s*([\d.]+)$/i,
+        select: function(context, node) {
+            var versionToUse = normalizeElectron(node.version);
+            return Object.keys(e2c).filter(generateFilter(node.sign, versionToUse)).map(function(i) {
+                return "chrome " + e2c[i];
+            });
+        }
+    },
+    node_ray: {
+        matches: [
+            "sign",
+            "version"
+        ],
+        regexp: /^node\s*(>=?|<=?)\s*([\d.]+)$/i,
+        select: function(context, node) {
+            return browserslist.nodeVersions.filter(generateSemverFilter(node.sign, node.version)).map(function(v) {
+                return "node " + v;
+            });
+        }
+    },
+    browser_ray: {
+        matches: [
+            "browser",
+            "sign",
+            "version"
+        ],
+        regexp: /^(\w+)\s*(>=?|<=?)\s*([\d.]+)$/,
+        select: function(context, node) {
+            var version = node.version;
+            var data = checkName(node.browser, context);
+            var alias = browserslist.versionAliases[data.name][version];
+            if (alias) version = alias;
+            return data.released.filter(generateFilter(node.sign, version)).map(function(v) {
+                return data.name + " " + v;
+            });
+        }
+    },
+    firefox_esr: {
+        matches: [],
+        regexp: /^(firefox|ff|fx)\s+esr$/i,
+        select: function() {
+            return [
+                "firefox 102"
+            ];
+        }
+    },
+    opera_mini_all: {
+        matches: [],
+        regexp: /(operamini|op_mini)\s+all/i,
+        select: function() {
+            return [
+                "op_mini all"
+            ];
+        }
+    },
+    electron_version: {
+        matches: [
+            "version"
+        ],
+        regexp: /^electron\s+([\d.]+)$/i,
+        select: function(context, node) {
+            var versionToUse = normalizeElectron(node.version);
+            var chrome = e2c[versionToUse];
+            if (!chrome) throw new BrowserslistError("Unknown version " + node.version + " of electron");
+            return [
+                "chrome " + chrome
+            ];
+        }
+    },
+    node_major_version: {
+        matches: [
+            "version"
+        ],
+        regexp: /^node\s+(\d+)$/i,
+        select: nodeQuery
+    },
+    node_minor_version: {
+        matches: [
+            "version"
+        ],
+        regexp: /^node\s+(\d+\.\d+)$/i,
+        select: nodeQuery
+    },
+    node_patch_version: {
+        matches: [
+            "version"
+        ],
+        regexp: /^node\s+(\d+\.\d+\.\d+)$/i,
+        select: nodeQuery
+    },
+    current_node: {
+        matches: [],
+        regexp: /^current\s+node$/i,
+        select: function(context) {
+            return [
+                env.currentNode(resolve, context)
+            ];
+        }
+    },
+    maintained_node: {
+        matches: [],
+        regexp: /^maintained\s+node\s+versions$/i,
+        select: function(context) {
+            var now = Date.now();
+            var queries = Object.keys(jsEOL).filter(function(key) {
+                return now < Date.parse(jsEOL[key].end) && now > Date.parse(jsEOL[key].start) && isEolReleased(key);
+            }).map(function(key) {
+                return "node " + key.slice(1);
+            });
+            return resolve(queries, context);
+        }
+    },
+    phantomjs_1_9: {
+        matches: [],
+        regexp: /^phantomjs\s+1.9$/i,
+        select: function() {
+            return [
+                "safari 5"
+            ];
+        }
+    },
+    phantomjs_2_1: {
+        matches: [],
+        regexp: /^phantomjs\s+2.1$/i,
+        select: function() {
+            return [
+                "safari 6"
+            ];
+        }
+    },
+    browser_version: {
+        matches: [
+            "browser",
+            "version"
+        ],
+        regexp: /^(\w+)\s+(tp|[\d.]+)$/i,
+        select: function(context, node) {
+            var version = node.version;
+            if (/^tp$/i.test(version)) version = "TP";
+            var data = checkName(node.browser, context);
+            var alias = normalizeVersion(data, version);
+            if (alias) version = alias;
+            else {
+                if (version.indexOf(".") === -1) alias = version + ".0";
+                else alias = version.replace(/\.0$/, "");
+                alias = normalizeVersion(data, alias);
+                if (alias) version = alias;
+                else if (context.ignoreUnknownVersions) return [];
+                else throw new BrowserslistError("Unknown version " + version + " of " + node.browser);
+            }
+            return [
+                data.name + " " + version
+            ];
+        }
+    },
+    browserslist_config: {
+        matches: [],
+        regexp: /^browserslist config$/i,
+        select: function(context) {
+            return browserslist(undefined, context);
+        }
+    },
+    extends: {
+        matches: [
+            "config"
+        ],
+        regexp: /^extends (.+)$/i,
+        select: function(context, node) {
+            return resolve(env.loadQueries(context, node.config), context);
+        }
+    },
+    defaults: {
+        matches: [],
+        regexp: /^defaults$/i,
+        select: function(context) {
+            return resolve(browserslist.defaults, context);
+        }
+    },
+    dead: {
+        matches: [],
+        regexp: /^dead$/i,
+        select: function(context) {
+            var dead = [
+                "Baidu >= 0",
+                "ie <= 11",
+                "ie_mob <= 11",
+                "bb <= 10",
+                "op_mob <= 12.1",
+                "samsung 4"
+            ];
+            return resolve(dead, context);
+        }
+    },
+    unknown: {
+        matches: [],
+        regexp: /^(\w+)$/i,
+        select: function(context, node) {
+            if (byName(node.query, context)) throw new BrowserslistError("Specify versions in Browserslist query for browser " + node.query);
+            else throw unknownQuery(node.query);
+        }
+    }
+};
+(function() {
+    for(var name in agents){
+        var browser = agents[name];
+        browserslist.data[name] = {
+            name: name,
+            versions: normalize(agents[name].versions),
+            released: normalize(agents[name].versions.slice(0, -3)),
+            releaseDate: agents[name].release_date
+        };
+        fillUsage(browserslist.usage.global, name, browser.usage_global);
+        browserslist.versionAliases[name] = {};
+        for(var i = 0; i < browser.versions.length; i++){
+            var full = browser.versions[i];
+            if (!full) continue;
+            if (full.indexOf("-") !== -1) {
+                var interval = full.split("-");
+                for(var j = 0; j < interval.length; j++)browserslist.versionAliases[name][interval[j]] = full;
+            }
+        }
+    }
+    browserslist.versionAliases.op_mob["59"] = "58";
+    browserslist.nodeVersions = jsReleases.map(function(release) {
+        return release.version;
+    });
+})();
+module.exports = browserslist;
+
+},{"2dbbbb0bc07c87c9":"qrnUB","bf482965d275e354":"1o0P3","3f437ee999fcc89e":"b7Kzh","d610fb3e1f32be4c":"jhUEF","4bd56fb766e60c44":"i95xm","ce5345215222ec0":"4GzM4","f113e7c12a3ee40e":"a4Lkh","d68b08d31de290b6":"hteYL"}],"qrnUB":[function(require,module,exports) {
+module.exports = JSON.parse('[{"name":"nodejs","version":"0.2.0","date":"2011-08-26","lts":false,"security":false},{"name":"nodejs","version":"0.3.0","date":"2011-08-26","lts":false,"security":false},{"name":"nodejs","version":"0.4.0","date":"2011-08-26","lts":false,"security":false},{"name":"nodejs","version":"0.5.0","date":"2011-08-26","lts":false,"security":false},{"name":"nodejs","version":"0.6.0","date":"2011-11-04","lts":false,"security":false},{"name":"nodejs","version":"0.7.0","date":"2012-01-17","lts":false,"security":false},{"name":"nodejs","version":"0.8.0","date":"2012-06-22","lts":false,"security":false},{"name":"nodejs","version":"0.9.0","date":"2012-07-20","lts":false,"security":false},{"name":"nodejs","version":"0.10.0","date":"2013-03-11","lts":false,"security":false},{"name":"nodejs","version":"0.11.0","date":"2013-03-28","lts":false,"security":false},{"name":"nodejs","version":"0.12.0","date":"2015-02-06","lts":false,"security":false},{"name":"nodejs","version":"4.0.0","date":"2015-09-08","lts":false,"security":false},{"name":"nodejs","version":"4.1.0","date":"2015-09-17","lts":false,"security":false},{"name":"nodejs","version":"4.2.0","date":"2015-10-12","lts":"Argon","security":false},{"name":"nodejs","version":"4.3.0","date":"2016-02-09","lts":"Argon","security":false},{"name":"nodejs","version":"4.4.0","date":"2016-03-08","lts":"Argon","security":false},{"name":"nodejs","version":"4.5.0","date":"2016-08-16","lts":"Argon","security":false},{"name":"nodejs","version":"4.6.0","date":"2016-09-27","lts":"Argon","security":true},{"name":"nodejs","version":"4.7.0","date":"2016-12-06","lts":"Argon","security":false},{"name":"nodejs","version":"4.8.0","date":"2017-02-21","lts":"Argon","security":false},{"name":"nodejs","version":"4.9.0","date":"2018-03-28","lts":"Argon","security":true},{"name":"nodejs","version":"5.0.0","date":"2015-10-29","lts":false,"security":false},{"name":"nodejs","version":"5.1.0","date":"2015-11-17","lts":false,"security":false},{"name":"nodejs","version":"5.2.0","date":"2015-12-09","lts":false,"security":false},{"name":"nodejs","version":"5.3.0","date":"2015-12-15","lts":false,"security":false},{"name":"nodejs","version":"5.4.0","date":"2016-01-06","lts":false,"security":false},{"name":"nodejs","version":"5.5.0","date":"2016-01-21","lts":false,"security":false},{"name":"nodejs","version":"5.6.0","date":"2016-02-09","lts":false,"security":false},{"name":"nodejs","version":"5.7.0","date":"2016-02-23","lts":false,"security":false},{"name":"nodejs","version":"5.8.0","date":"2016-03-09","lts":false,"security":false},{"name":"nodejs","version":"5.9.0","date":"2016-03-16","lts":false,"security":false},{"name":"nodejs","version":"5.10.0","date":"2016-04-01","lts":false,"security":false},{"name":"nodejs","version":"5.11.0","date":"2016-04-21","lts":false,"security":false},{"name":"nodejs","version":"5.12.0","date":"2016-06-23","lts":false,"security":false},{"name":"nodejs","version":"6.0.0","date":"2016-04-26","lts":false,"security":false},{"name":"nodejs","version":"6.1.0","date":"2016-05-05","lts":false,"security":false},{"name":"nodejs","version":"6.2.0","date":"2016-05-17","lts":false,"security":false},{"name":"nodejs","version":"6.3.0","date":"2016-07-06","lts":false,"security":false},{"name":"nodejs","version":"6.4.0","date":"2016-08-12","lts":false,"security":false},{"name":"nodejs","version":"6.5.0","date":"2016-08-26","lts":false,"security":false},{"name":"nodejs","version":"6.6.0","date":"2016-09-14","lts":false,"security":false},{"name":"nodejs","version":"6.7.0","date":"2016-09-27","lts":false,"security":true},{"name":"nodejs","version":"6.8.0","date":"2016-10-12","lts":false,"security":false},{"name":"nodejs","version":"6.9.0","date":"2016-10-18","lts":"Boron","security":false},{"name":"nodejs","version":"6.10.0","date":"2017-02-21","lts":"Boron","security":false},{"name":"nodejs","version":"6.11.0","date":"2017-06-06","lts":"Boron","security":false},{"name":"nodejs","version":"6.12.0","date":"2017-11-06","lts":"Boron","security":false},{"name":"nodejs","version":"6.13.0","date":"2018-02-10","lts":"Boron","security":false},{"name":"nodejs","version":"6.14.0","date":"2018-03-28","lts":"Boron","security":true},{"name":"nodejs","version":"6.15.0","date":"2018-11-27","lts":"Boron","security":true},{"name":"nodejs","version":"6.16.0","date":"2018-12-26","lts":"Boron","security":false},{"name":"nodejs","version":"6.17.0","date":"2019-02-28","lts":"Boron","security":true},{"name":"nodejs","version":"7.0.0","date":"2016-10-25","lts":false,"security":false},{"name":"nodejs","version":"7.1.0","date":"2016-11-08","lts":false,"security":false},{"name":"nodejs","version":"7.2.0","date":"2016-11-22","lts":false,"security":false},{"name":"nodejs","version":"7.3.0","date":"2016-12-20","lts":false,"security":false},{"name":"nodejs","version":"7.4.0","date":"2017-01-04","lts":false,"security":false},{"name":"nodejs","version":"7.5.0","date":"2017-01-31","lts":false,"security":false},{"name":"nodejs","version":"7.6.0","date":"2017-02-21","lts":false,"security":false},{"name":"nodejs","version":"7.7.0","date":"2017-02-28","lts":false,"security":false},{"name":"nodejs","version":"7.8.0","date":"2017-03-29","lts":false,"security":false},{"name":"nodejs","version":"7.9.0","date":"2017-04-11","lts":false,"security":false},{"name":"nodejs","version":"7.10.0","date":"2017-05-02","lts":false,"security":false},{"name":"nodejs","version":"8.0.0","date":"2017-05-30","lts":false,"security":false},{"name":"nodejs","version":"8.1.0","date":"2017-06-08","lts":false,"security":false},{"name":"nodejs","version":"8.2.0","date":"2017-07-19","lts":false,"security":false},{"name":"nodejs","version":"8.3.0","date":"2017-08-08","lts":false,"security":false},{"name":"nodejs","version":"8.4.0","date":"2017-08-15","lts":false,"security":false},{"name":"nodejs","version":"8.5.0","date":"2017-09-12","lts":false,"security":false},{"name":"nodejs","version":"8.6.0","date":"2017-09-26","lts":false,"security":false},{"name":"nodejs","version":"8.7.0","date":"2017-10-11","lts":false,"security":false},{"name":"nodejs","version":"8.8.0","date":"2017-10-24","lts":false,"security":false},{"name":"nodejs","version":"8.9.0","date":"2017-10-31","lts":"Carbon","security":false},{"name":"nodejs","version":"8.10.0","date":"2018-03-06","lts":"Carbon","security":false},{"name":"nodejs","version":"8.11.0","date":"2018-03-28","lts":"Carbon","security":true},{"name":"nodejs","version":"8.12.0","date":"2018-09-10","lts":"Carbon","security":false},{"name":"nodejs","version":"8.13.0","date":"2018-11-20","lts":"Carbon","security":false},{"name":"nodejs","version":"8.14.0","date":"2018-11-27","lts":"Carbon","security":true},{"name":"nodejs","version":"8.15.0","date":"2018-12-26","lts":"Carbon","security":false},{"name":"nodejs","version":"8.16.0","date":"2019-04-16","lts":"Carbon","security":false},{"name":"nodejs","version":"8.17.0","date":"2019-12-17","lts":"Carbon","security":true},{"name":"nodejs","version":"9.0.0","date":"2017-10-31","lts":false,"security":false},{"name":"nodejs","version":"9.1.0","date":"2017-11-07","lts":false,"security":false},{"name":"nodejs","version":"9.2.0","date":"2017-11-14","lts":false,"security":false},{"name":"nodejs","version":"9.3.0","date":"2017-12-12","lts":false,"security":false},{"name":"nodejs","version":"9.4.0","date":"2018-01-10","lts":false,"security":false},{"name":"nodejs","version":"9.5.0","date":"2018-01-31","lts":false,"security":false},{"name":"nodejs","version":"9.6.0","date":"2018-02-21","lts":false,"security":false},{"name":"nodejs","version":"9.7.0","date":"2018-03-01","lts":false,"security":false},{"name":"nodejs","version":"9.8.0","date":"2018-03-07","lts":false,"security":false},{"name":"nodejs","version":"9.9.0","date":"2018-03-21","lts":false,"security":false},{"name":"nodejs","version":"9.10.0","date":"2018-03-28","lts":false,"security":true},{"name":"nodejs","version":"9.11.0","date":"2018-04-04","lts":false,"security":false},{"name":"nodejs","version":"10.0.0","date":"2018-04-24","lts":false,"security":false},{"name":"nodejs","version":"10.1.0","date":"2018-05-08","lts":false,"security":false},{"name":"nodejs","version":"10.2.0","date":"2018-05-23","lts":false,"security":false},{"name":"nodejs","version":"10.3.0","date":"2018-05-29","lts":false,"security":false},{"name":"nodejs","version":"10.4.0","date":"2018-06-06","lts":false,"security":false},{"name":"nodejs","version":"10.5.0","date":"2018-06-20","lts":false,"security":false},{"name":"nodejs","version":"10.6.0","date":"2018-07-04","lts":false,"security":false},{"name":"nodejs","version":"10.7.0","date":"2018-07-18","lts":false,"security":false},{"name":"nodejs","version":"10.8.0","date":"2018-08-01","lts":false,"security":false},{"name":"nodejs","version":"10.9.0","date":"2018-08-15","lts":false,"security":false},{"name":"nodejs","version":"10.10.0","date":"2018-09-06","lts":false,"security":false},{"name":"nodejs","version":"10.11.0","date":"2018-09-19","lts":false,"security":false},{"name":"nodejs","version":"10.12.0","date":"2018-10-10","lts":false,"security":false},{"name":"nodejs","version":"10.13.0","date":"2018-10-30","lts":"Dubnium","security":false},{"name":"nodejs","version":"10.14.0","date":"2018-11-27","lts":"Dubnium","security":true},{"name":"nodejs","version":"10.15.0","date":"2018-12-26","lts":"Dubnium","security":false},{"name":"nodejs","version":"10.16.0","date":"2019-05-28","lts":"Dubnium","security":false},{"name":"nodejs","version":"10.17.0","date":"2019-10-22","lts":"Dubnium","security":false},{"name":"nodejs","version":"10.18.0","date":"2019-12-17","lts":"Dubnium","security":true},{"name":"nodejs","version":"10.19.0","date":"2020-02-05","lts":"Dubnium","security":true},{"name":"nodejs","version":"10.20.0","date":"2020-03-26","lts":"Dubnium","security":false},{"name":"nodejs","version":"10.21.0","date":"2020-06-02","lts":"Dubnium","security":true},{"name":"nodejs","version":"10.22.0","date":"2020-07-21","lts":"Dubnium","security":false},{"name":"nodejs","version":"10.23.0","date":"2020-10-27","lts":"Dubnium","security":false},{"name":"nodejs","version":"10.24.0","date":"2021-02-23","lts":"Dubnium","security":true},{"name":"nodejs","version":"11.0.0","date":"2018-10-23","lts":false,"security":false},{"name":"nodejs","version":"11.1.0","date":"2018-10-30","lts":false,"security":false},{"name":"nodejs","version":"11.2.0","date":"2018-11-15","lts":false,"security":false},{"name":"nodejs","version":"11.3.0","date":"2018-11-27","lts":false,"security":true},{"name":"nodejs","version":"11.4.0","date":"2018-12-07","lts":false,"security":false},{"name":"nodejs","version":"11.5.0","date":"2018-12-18","lts":false,"security":false},{"name":"nodejs","version":"11.6.0","date":"2018-12-26","lts":false,"security":false},{"name":"nodejs","version":"11.7.0","date":"2019-01-17","lts":false,"security":false},{"name":"nodejs","version":"11.8.0","date":"2019-01-24","lts":false,"security":false},{"name":"nodejs","version":"11.9.0","date":"2019-01-30","lts":false,"security":false},{"name":"nodejs","version":"11.10.0","date":"2019-02-14","lts":false,"security":false},{"name":"nodejs","version":"11.11.0","date":"2019-03-05","lts":false,"security":false},{"name":"nodejs","version":"11.12.0","date":"2019-03-14","lts":false,"security":false},{"name":"nodejs","version":"11.13.0","date":"2019-03-28","lts":false,"security":false},{"name":"nodejs","version":"11.14.0","date":"2019-04-10","lts":false,"security":false},{"name":"nodejs","version":"11.15.0","date":"2019-04-30","lts":false,"security":false},{"name":"nodejs","version":"12.0.0","date":"2019-04-23","lts":false,"security":false},{"name":"nodejs","version":"12.1.0","date":"2019-04-29","lts":false,"security":false},{"name":"nodejs","version":"12.2.0","date":"2019-05-07","lts":false,"security":false},{"name":"nodejs","version":"12.3.0","date":"2019-05-21","lts":false,"security":false},{"name":"nodejs","version":"12.4.0","date":"2019-06-04","lts":false,"security":false},{"name":"nodejs","version":"12.5.0","date":"2019-06-26","lts":false,"security":false},{"name":"nodejs","version":"12.6.0","date":"2019-07-03","lts":false,"security":false},{"name":"nodejs","version":"12.7.0","date":"2019-07-23","lts":false,"security":false},{"name":"nodejs","version":"12.8.0","date":"2019-08-06","lts":false,"security":false},{"name":"nodejs","version":"12.9.0","date":"2019-08-20","lts":false,"security":false},{"name":"nodejs","version":"12.10.0","date":"2019-09-04","lts":false,"security":false},{"name":"nodejs","version":"12.11.0","date":"2019-09-25","lts":false,"security":false},{"name":"nodejs","version":"12.12.0","date":"2019-10-11","lts":false,"security":false},{"name":"nodejs","version":"12.13.0","date":"2019-10-21","lts":"Erbium","security":false},{"name":"nodejs","version":"12.14.0","date":"2019-12-17","lts":"Erbium","security":true},{"name":"nodejs","version":"12.15.0","date":"2020-02-05","lts":"Erbium","security":true},{"name":"nodejs","version":"12.16.0","date":"2020-02-11","lts":"Erbium","security":false},{"name":"nodejs","version":"12.17.0","date":"2020-05-26","lts":"Erbium","security":false},{"name":"nodejs","version":"12.18.0","date":"2020-06-02","lts":"Erbium","security":true},{"name":"nodejs","version":"12.19.0","date":"2020-10-06","lts":"Erbium","security":false},{"name":"nodejs","version":"12.20.0","date":"2020-11-24","lts":"Erbium","security":false},{"name":"nodejs","version":"12.21.0","date":"2021-02-23","lts":"Erbium","security":true},{"name":"nodejs","version":"12.22.0","date":"2021-03-30","lts":"Erbium","security":false},{"name":"nodejs","version":"13.0.0","date":"2019-10-22","lts":false,"security":false},{"name":"nodejs","version":"13.1.0","date":"2019-11-05","lts":false,"security":false},{"name":"nodejs","version":"13.2.0","date":"2019-11-21","lts":false,"security":false},{"name":"nodejs","version":"13.3.0","date":"2019-12-03","lts":false,"security":false},{"name":"nodejs","version":"13.4.0","date":"2019-12-17","lts":false,"security":true},{"name":"nodejs","version":"13.5.0","date":"2019-12-18","lts":false,"security":false},{"name":"nodejs","version":"13.6.0","date":"2020-01-07","lts":false,"security":false},{"name":"nodejs","version":"13.7.0","date":"2020-01-21","lts":false,"security":false},{"name":"nodejs","version":"13.8.0","date":"2020-02-05","lts":false,"security":true},{"name":"nodejs","version":"13.9.0","date":"2020-02-18","lts":false,"security":false},{"name":"nodejs","version":"13.10.0","date":"2020-03-04","lts":false,"security":false},{"name":"nodejs","version":"13.11.0","date":"2020-03-12","lts":false,"security":false},{"name":"nodejs","version":"13.12.0","date":"2020-03-26","lts":false,"security":false},{"name":"nodejs","version":"13.13.0","date":"2020-04-14","lts":false,"security":false},{"name":"nodejs","version":"13.14.0","date":"2020-04-29","lts":false,"security":false},{"name":"nodejs","version":"14.0.0","date":"2020-04-21","lts":false,"security":false},{"name":"nodejs","version":"14.1.0","date":"2020-04-29","lts":false,"security":false},{"name":"nodejs","version":"14.2.0","date":"2020-05-05","lts":false,"security":false},{"name":"nodejs","version":"14.3.0","date":"2020-05-19","lts":false,"security":false},{"name":"nodejs","version":"14.4.0","date":"2020-06-02","lts":false,"security":true},{"name":"nodejs","version":"14.5.0","date":"2020-06-30","lts":false,"security":false},{"name":"nodejs","version":"14.6.0","date":"2020-07-20","lts":false,"security":false},{"name":"nodejs","version":"14.7.0","date":"2020-07-29","lts":false,"security":false},{"name":"nodejs","version":"14.8.0","date":"2020-08-11","lts":false,"security":false},{"name":"nodejs","version":"14.9.0","date":"2020-08-27","lts":false,"security":false},{"name":"nodejs","version":"14.10.0","date":"2020-09-08","lts":false,"security":false},{"name":"nodejs","version":"14.11.0","date":"2020-09-15","lts":false,"security":true},{"name":"nodejs","version":"14.12.0","date":"2020-09-22","lts":false,"security":false},{"name":"nodejs","version":"14.13.0","date":"2020-09-29","lts":false,"security":false},{"name":"nodejs","version":"14.14.0","date":"2020-10-15","lts":false,"security":false},{"name":"nodejs","version":"14.15.0","date":"2020-10-27","lts":"Fermium","security":false},{"name":"nodejs","version":"14.16.0","date":"2021-02-23","lts":"Fermium","security":true},{"name":"nodejs","version":"14.17.0","date":"2021-05-11","lts":"Fermium","security":false},{"name":"nodejs","version":"14.18.0","date":"2021-09-28","lts":"Fermium","security":false},{"name":"nodejs","version":"14.19.0","date":"2022-02-01","lts":"Fermium","security":false},{"name":"nodejs","version":"14.20.0","date":"2022-07-07","lts":"Fermium","security":true},{"name":"nodejs","version":"14.21.0","date":"2022-11-01","lts":"Fermium","security":false},{"name":"nodejs","version":"15.0.0","date":"2020-10-20","lts":false,"security":false},{"name":"nodejs","version":"15.1.0","date":"2020-11-04","lts":false,"security":false},{"name":"nodejs","version":"15.2.0","date":"2020-11-10","lts":false,"security":false},{"name":"nodejs","version":"15.3.0","date":"2020-11-24","lts":false,"security":false},{"name":"nodejs","version":"15.4.0","date":"2020-12-09","lts":false,"security":false},{"name":"nodejs","version":"15.5.0","date":"2020-12-22","lts":false,"security":false},{"name":"nodejs","version":"15.6.0","date":"2021-01-14","lts":false,"security":false},{"name":"nodejs","version":"15.7.0","date":"2021-01-25","lts":false,"security":false},{"name":"nodejs","version":"15.8.0","date":"2021-02-02","lts":false,"security":false},{"name":"nodejs","version":"15.9.0","date":"2021-02-18","lts":false,"security":false},{"name":"nodejs","version":"15.10.0","date":"2021-02-23","lts":false,"security":true},{"name":"nodejs","version":"15.11.0","date":"2021-03-03","lts":false,"security":false},{"name":"nodejs","version":"15.12.0","date":"2021-03-17","lts":false,"security":false},{"name":"nodejs","version":"15.13.0","date":"2021-03-31","lts":false,"security":false},{"name":"nodejs","version":"15.14.0","date":"2021-04-06","lts":false,"security":false},{"name":"nodejs","version":"16.0.0","date":"2021-04-20","lts":false,"security":false},{"name":"nodejs","version":"16.1.0","date":"2021-05-04","lts":false,"security":false},{"name":"nodejs","version":"16.2.0","date":"2021-05-19","lts":false,"security":false},{"name":"nodejs","version":"16.3.0","date":"2021-06-03","lts":false,"security":false},{"name":"nodejs","version":"16.4.0","date":"2021-06-23","lts":false,"security":false},{"name":"nodejs","version":"16.5.0","date":"2021-07-14","lts":false,"security":false},{"name":"nodejs","version":"16.6.0","date":"2021-07-29","lts":false,"security":true},{"name":"nodejs","version":"16.7.0","date":"2021-08-18","lts":false,"security":false},{"name":"nodejs","version":"16.8.0","date":"2021-08-25","lts":false,"security":false},{"name":"nodejs","version":"16.9.0","date":"2021-09-07","lts":false,"security":false},{"name":"nodejs","version":"16.10.0","date":"2021-09-22","lts":false,"security":false},{"name":"nodejs","version":"16.11.0","date":"2021-10-08","lts":false,"security":false},{"name":"nodejs","version":"16.12.0","date":"2021-10-20","lts":false,"security":false},{"name":"nodejs","version":"16.13.0","date":"2021-10-26","lts":"Gallium","security":false},{"name":"nodejs","version":"16.14.0","date":"2022-02-08","lts":"Gallium","security":false},{"name":"nodejs","version":"16.15.0","date":"2022-04-26","lts":"Gallium","security":false},{"name":"nodejs","version":"16.16.0","date":"2022-07-07","lts":"Gallium","security":true},{"name":"nodejs","version":"16.17.0","date":"2022-08-16","lts":"Gallium","security":false},{"name":"nodejs","version":"16.18.0","date":"2022-10-12","lts":"Gallium","security":false},{"name":"nodejs","version":"16.19.0","date":"2022-12-13","lts":"Gallium","security":false},{"name":"nodejs","version":"17.0.0","date":"2021-10-19","lts":false,"security":false},{"name":"nodejs","version":"17.1.0","date":"2021-11-09","lts":false,"security":false},{"name":"nodejs","version":"17.2.0","date":"2021-11-30","lts":false,"security":false},{"name":"nodejs","version":"17.3.0","date":"2021-12-17","lts":false,"security":false},{"name":"nodejs","version":"17.4.0","date":"2022-01-18","lts":false,"security":false},{"name":"nodejs","version":"17.5.0","date":"2022-02-10","lts":false,"security":false},{"name":"nodejs","version":"17.6.0","date":"2022-02-22","lts":false,"security":false},{"name":"nodejs","version":"17.7.0","date":"2022-03-09","lts":false,"security":false},{"name":"nodejs","version":"17.8.0","date":"2022-03-22","lts":false,"security":false},{"name":"nodejs","version":"17.9.0","date":"2022-04-07","lts":false,"security":false},{"name":"nodejs","version":"18.0.0","date":"2022-04-18","lts":false,"security":false},{"name":"nodejs","version":"18.1.0","date":"2022-05-03","lts":false,"security":false},{"name":"nodejs","version":"18.2.0","date":"2022-05-17","lts":false,"security":false},{"name":"nodejs","version":"18.3.0","date":"2022-06-02","lts":false,"security":false},{"name":"nodejs","version":"18.4.0","date":"2022-06-16","lts":false,"security":false},{"name":"nodejs","version":"18.5.0","date":"2022-07-06","lts":false,"security":true},{"name":"nodejs","version":"18.6.0","date":"2022-07-13","lts":false,"security":false},{"name":"nodejs","version":"18.7.0","date":"2022-07-26","lts":false,"security":false},{"name":"nodejs","version":"18.8.0","date":"2022-08-24","lts":false,"security":false},{"name":"nodejs","version":"18.9.0","date":"2022-09-07","lts":false,"security":false},{"name":"nodejs","version":"18.10.0","date":"2022-09-28","lts":false,"security":false},{"name":"nodejs","version":"18.11.0","date":"2022-10-13","lts":false,"security":false},{"name":"nodejs","version":"18.12.0","date":"2022-10-25","lts":"Hydrogen","security":false},{"name":"nodejs","version":"18.13.0","date":"2023-01-05","lts":"Hydrogen","security":false},{"name":"nodejs","version":"18.14.0","date":"2023-02-01","lts":"Hydrogen","security":false},{"name":"nodejs","version":"19.0.0","date":"2022-10-17","lts":false,"security":false},{"name":"nodejs","version":"19.1.0","date":"2022-11-14","lts":false,"security":false},{"name":"nodejs","version":"19.2.0","date":"2022-11-29","lts":false,"security":false},{"name":"nodejs","version":"19.3.0","date":"2022-12-14","lts":false,"security":false},{"name":"nodejs","version":"19.4.0","date":"2023-01-05","lts":false,"security":false},{"name":"nodejs","version":"19.5.0","date":"2023-01-24","lts":false,"security":false},{"name":"nodejs","version":"19.6.0","date":"2023-02-01","lts":false,"security":false}]');
+
+},{}],"1o0P3":[function(require,module,exports) {
+"use strict";
+const browsers = require("a47f6e612bc663c2").browsers;
+const versions = require("107d27a6af2a55fd").browserVersions;
+const agentsData = require("68d4fed2cffd5fce");
+function unpackBrowserVersions(versionsData) {
+    return Object.keys(versionsData).reduce((usage, version)=>{
+        usage[versions[version]] = versionsData[version];
+        return usage;
+    }, {});
+}
+module.exports.agents = Object.keys(agentsData).reduce((map, key)=>{
+    let versionsData = agentsData[key];
+    map[browsers[key]] = Object.keys(versionsData).reduce((data, entry)=>{
+        if (entry === "A") data.usage_global = unpackBrowserVersions(versionsData[entry]);
+        else if (entry === "C") data.versions = versionsData[entry].reduce((list, version)=>{
+            if (version === "") list.push(null);
+            else list.push(versions[version]);
+            return list;
+        }, []);
+        else if (entry === "D") data.prefix_exceptions = unpackBrowserVersions(versionsData[entry]);
+        else if (entry === "E") data.browser = versionsData[entry];
+        else if (entry === "F") data.release_date = Object.keys(versionsData[entry]).reduce((map2, key2)=>{
+            map2[versions[key2]] = versionsData[entry][key2];
+            return map2;
+        }, {});
+        else // entry is B
+        data.prefix = versionsData[entry];
+        return data;
+    }, {});
+    return map;
+}, {});
+
+},{"a47f6e612bc663c2":"1klRD","107d27a6af2a55fd":"gSgrO","68d4fed2cffd5fce":"dwIbB"}],"1klRD":[function(require,module,exports) {
+module.exports.browsers = require("9fa40a637f3d8ed4");
+
+},{"9fa40a637f3d8ed4":"dD80h"}],"dD80h":[function(require,module,exports) {
+module.exports = {
+    A: "ie",
+    B: "edge",
+    C: "firefox",
+    D: "chrome",
+    E: "safari",
+    F: "opera",
+    G: "ios_saf",
+    H: "op_mini",
+    I: "android",
+    J: "bb",
+    K: "op_mob",
+    L: "and_chr",
+    M: "and_ff",
+    N: "ie_mob",
+    O: "and_uc",
+    P: "samsung",
+    Q: "and_qq",
+    R: "baidu",
+    S: "kaios"
+};
+
+},{}],"gSgrO":[function(require,module,exports) {
+module.exports.browserVersions = require("b15a08aeef1f6c3c");
+
+},{"b15a08aeef1f6c3c":"jocZZ"}],"jocZZ":[function(require,module,exports) {
+module.exports = {
+    "0": "24",
+    "1": "25",
+    "2": "26",
+    "3": "27",
+    "4": "28",
+    "5": "29",
+    "6": "30",
+    "7": "31",
+    "8": "32",
+    "9": "33",
+    A: "10",
+    B: "11",
+    C: "12",
+    D: "7",
+    E: "8",
+    F: "9",
+    G: "15",
+    H: "110",
+    I: "4",
+    J: "6",
+    K: "13",
+    L: "14",
+    M: "16",
+    N: "17",
+    O: "18",
+    P: "79",
+    Q: "80",
+    R: "81",
+    S: "83",
+    T: "84",
+    U: "85",
+    V: "86",
+    W: "87",
+    X: "88",
+    Y: "89",
+    Z: "90",
+    a: "91",
+    b: "92",
+    c: "93",
+    d: "94",
+    e: "95",
+    f: "109",
+    g: "20",
+    h: "73",
+    i: "96",
+    j: "97",
+    k: "98",
+    l: "99",
+    m: "100",
+    n: "101",
+    o: "102",
+    p: "103",
+    q: "104",
+    r: "105",
+    s: "106",
+    t: "107",
+    u: "108",
+    v: "5",
+    w: "19",
+    x: "21",
+    y: "22",
+    z: "23",
+    AB: "34",
+    BB: "35",
+    CB: "36",
+    DB: "37",
+    EB: "38",
+    FB: "39",
+    GB: "40",
+    HB: "41",
+    IB: "42",
+    JB: "43",
+    KB: "44",
+    LB: "45",
+    MB: "46",
+    NB: "47",
+    OB: "48",
+    PB: "49",
+    QB: "50",
+    RB: "51",
+    SB: "52",
+    TB: "53",
+    UB: "54",
+    VB: "55",
+    WB: "56",
+    XB: "57",
+    YB: "58",
+    ZB: "60",
+    aB: "62",
+    bB: "63",
+    cB: "64",
+    dB: "65",
+    eB: "66",
+    fB: "67",
+    gB: "68",
+    hB: "69",
+    iB: "70",
+    jB: "71",
+    kB: "72",
+    lB: "74",
+    mB: "75",
+    nB: "76",
+    oB: "77",
+    pB: "78",
+    qB: "11.1",
+    rB: "12.1",
+    sB: "16.0",
+    tB: "3",
+    uB: "59",
+    vB: "61",
+    wB: "82",
+    xB: "111",
+    yB: "112",
+    zB: "3.2",
+    "0B": "10.1",
+    "1B": "13.1",
+    "2B": "15.2-15.3",
+    "3B": "15.4",
+    "4B": "15.5",
+    "5B": "15.6",
+    "6B": "16.1",
+    "7B": "16.2",
+    "8B": "16.3",
+    "9B": "16.4",
+    AC: "11.5",
+    BC: "4.2-4.3",
+    CC: "5.5",
+    DC: "2",
+    EC: "3.5",
+    FC: "3.6",
+    GC: "113",
+    HC: "3.1",
+    IC: "5.1",
+    JC: "6.1",
+    KC: "7.1",
+    LC: "9.1",
+    MC: "14.1",
+    NC: "15.1",
+    OC: "TP",
+    PC: "9.5-9.6",
+    QC: "10.0-10.1",
+    RC: "10.5",
+    SC: "10.6",
+    TC: "11.6",
+    UC: "4.0-4.1",
+    VC: "5.0-5.1",
+    WC: "6.0-6.1",
+    XC: "7.0-7.1",
+    YC: "8.1-8.4",
+    ZC: "9.0-9.2",
+    aC: "9.3",
+    bC: "10.0-10.2",
+    cC: "10.3",
+    dC: "11.0-11.2",
+    eC: "11.3-11.4",
+    fC: "12.0-12.1",
+    gC: "12.2-12.5",
+    hC: "13.0-13.1",
+    iC: "13.2",
+    jC: "13.3",
+    kC: "13.4-13.7",
+    lC: "14.0-14.4",
+    mC: "14.5-14.8",
+    nC: "15.0-15.1",
+    oC: "all",
+    pC: "2.1",
+    qC: "2.2",
+    rC: "2.3",
+    sC: "4.1",
+    tC: "4.4",
+    uC: "4.4.3-4.4.4",
+    vC: "13.4",
+    wC: "5.0-5.4",
+    xC: "6.2-6.4",
+    yC: "7.2-7.4",
+    zC: "8.2",
+    "0C": "9.2",
+    "1C": "11.1-11.2",
+    "2C": "12.0",
+    "3C": "13.0",
+    "4C": "14.0",
+    "5C": "15.0",
+    "6C": "17.0",
+    "7C": "18.0",
+    "8C": "19.0",
+    "9C": "13.18",
+    AD: "2.5",
+    BD: "3.0-3.1"
+};
+
+},{}],"dwIbB":[function(require,module,exports) {
+module.exports = {
+    A: {
+        A: {
+            J: 0.0131217,
+            D: 0.00621152,
+            E: 0.0478029,
+            F: 0.0573634,
+            A: 0.00956057,
+            B: 0.487589,
+            CC: 0.009298
+        },
+        B: "ms",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "CC",
+            "J",
+            "D",
+            "E",
+            "F",
+            "A",
+            "B",
+            "",
+            "",
+            ""
+        ],
+        E: "IE",
+        F: {
+            CC: 962323200,
+            J: 998870400,
+            D: 1161129600,
+            E: 1237420800,
+            F: 1300060800,
+            A: 1346716800,
+            B: 1381968000
+        }
+    },
+    B: {
+        A: {
+            C: 0.003861,
+            K: 0.004267,
+            L: 0.004268,
+            G: 0.003861,
+            M: 0.003702,
+            N: 0.003861,
+            O: 0.015444,
+            P: 0,
+            Q: 0.004298,
+            R: 0.00944,
+            S: 0.004043,
+            T: 0.007722,
+            U: 0.003861,
+            V: 0.003861,
+            W: 0.003861,
+            X: 0.003943,
+            Y: 0.007722,
+            Z: 0.003943,
+            a: 0.003943,
+            b: 0.007722,
+            c: 0.004118,
+            d: 0.003939,
+            e: 0.003943,
+            i: 0.003943,
+            j: 0.003943,
+            k: 0.003929,
+            l: 0.003901,
+            m: 0.011829,
+            n: 0.007886,
+            o: 0.003943,
+            p: 0.007722,
+            q: 0.003861,
+            r: 0.007722,
+            s: 0.011583,
+            t: 0.073359,
+            u: 0.111969,
+            f: 1.66023,
+            H: 2.23552
+        },
+        B: "webkit",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "C",
+            "K",
+            "L",
+            "G",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "f",
+            "H",
+            "",
+            "",
+            ""
+        ],
+        E: "Edge",
+        F: {
+            C: 1438128000,
+            K: 1447286400,
+            L: 1470096000,
+            G: 1491868800,
+            M: 1508198400,
+            N: 1525046400,
+            O: 1542067200,
+            P: 1579046400,
+            Q: 1581033600,
+            R: 1586736000,
+            S: 1590019200,
+            T: 1594857600,
+            U: 1598486400,
+            V: 1602201600,
+            W: 1605830400,
+            X: 1611360000,
+            Y: 1614816000,
+            Z: 1618358400,
+            a: 1622073600,
+            b: 1626912000,
+            c: 1630627200,
+            d: 1632441600,
+            e: 1634774400,
+            i: 1637539200,
+            j: 1641427200,
+            k: 1643932800,
+            l: 1646265600,
+            m: 1649635200,
+            n: 1651190400,
+            o: 1653955200,
+            p: 1655942400,
+            q: 1659657600,
+            r: 1661990400,
+            s: 1664755200,
+            t: 1666915200,
+            u: 1670198400,
+            f: 1673481600,
+            H: 1675900800
+        },
+        D: {
+            C: "ms",
+            K: "ms",
+            L: "ms",
+            G: "ms",
+            M: "ms",
+            N: "ms",
+            O: "ms"
+        }
+    },
+    C: {
+        A: {
+            "0": 0.008786,
+            "1": 0.004118,
+            "2": 0.004317,
+            "3": 0.004393,
+            "4": 0.004418,
+            "5": 0.008834,
+            "6": 0.008322,
+            "7": 0.008928,
+            "8": 0.004471,
+            "9": 0.009284,
+            DC: 0.004118,
+            tB: 0.004271,
+            I: 0.011703,
+            v: 0.004879,
+            J: 0.020136,
+            D: 0.005725,
+            E: 0.004525,
+            F: 0.00533,
+            A: 0.004283,
+            B: 0.007722,
+            C: 0.004471,
+            K: 0.004486,
+            L: 0.00453,
+            G: 0.008322,
+            M: 0.004417,
+            N: 0.004425,
+            O: 0.004161,
+            w: 0.004443,
+            g: 0.004283,
+            x: 0.008322,
+            y: 0.013698,
+            z: 0.004161,
+            AB: 0.004707,
+            BB: 0.009076,
+            CB: 0.003861,
+            DB: 0.004783,
+            EB: 0.003929,
+            FB: 0.004783,
+            GB: 0.00487,
+            HB: 0.005029,
+            IB: 0.0047,
+            JB: 0.019305,
+            KB: 0.003861,
+            LB: 0.003867,
+            MB: 0.004525,
+            NB: 0.004293,
+            OB: 0.003861,
+            PB: 0.004538,
+            QB: 0.008282,
+            RB: 0.011601,
+            SB: 0.046332,
+            TB: 0.011601,
+            UB: 0.003929,
+            VB: 0.003974,
+            WB: 0.003861,
+            XB: 0.011601,
+            YB: 0.003939,
+            uB: 0.003861,
+            ZB: 0.003929,
+            vB: 0.004356,
+            aB: 0.004425,
+            bB: 0.008322,
+            cB: 0.00415,
+            dB: 0.004267,
+            eB: 0.003801,
+            fB: 0.004267,
+            gB: 0.003861,
+            hB: 0.00415,
+            iB: 0.004293,
+            jB: 0.004425,
+            kB: 0.003861,
+            h: 0.00415,
+            lB: 0.00415,
+            mB: 0.004318,
+            nB: 0.004356,
+            oB: 0.003974,
+            pB: 0.034749,
+            P: 0.003861,
+            Q: 0.003861,
+            R: 0.003861,
+            wB: 0.003861,
+            S: 0.003861,
+            T: 0.003929,
+            U: 0.004268,
+            V: 0.003801,
+            W: 0.015444,
+            X: 0.007722,
+            Y: 0.003943,
+            Z: 0.003943,
+            a: 0.011583,
+            b: 0.003801,
+            c: 0.007722,
+            d: 0.011583,
+            e: 0.003773,
+            i: 0.007886,
+            j: 0.003901,
+            k: 0.003901,
+            l: 0.003861,
+            m: 0.003861,
+            n: 0.003861,
+            o: 0.096525,
+            p: 0.042471,
+            q: 0.007722,
+            r: 0.011583,
+            s: 0.015444,
+            t: 0.019305,
+            u: 0.069498,
+            f: 1.22008,
+            H: 0.814671,
+            xB: 0.007722,
+            yB: 0,
+            EC: 0.008786,
+            FC: 0.00487
+        },
+        B: "moz",
+        C: [
+            "DC",
+            "tB",
+            "EC",
+            "FC",
+            "I",
+            "v",
+            "J",
+            "D",
+            "E",
+            "F",
+            "A",
+            "B",
+            "C",
+            "K",
+            "L",
+            "G",
+            "M",
+            "N",
+            "O",
+            "w",
+            "g",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "AB",
+            "BB",
+            "CB",
+            "DB",
+            "EB",
+            "FB",
+            "GB",
+            "HB",
+            "IB",
+            "JB",
+            "KB",
+            "LB",
+            "MB",
+            "NB",
+            "OB",
+            "PB",
+            "QB",
+            "RB",
+            "SB",
+            "TB",
+            "UB",
+            "VB",
+            "WB",
+            "XB",
+            "YB",
+            "uB",
+            "ZB",
+            "vB",
+            "aB",
+            "bB",
+            "cB",
+            "dB",
+            "eB",
+            "fB",
+            "gB",
+            "hB",
+            "iB",
+            "jB",
+            "kB",
+            "h",
+            "lB",
+            "mB",
+            "nB",
+            "oB",
+            "pB",
+            "P",
+            "Q",
+            "R",
+            "wB",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "f",
+            "H",
+            "xB",
+            "yB",
+            ""
+        ],
+        E: "Firefox",
+        F: {
+            "0": 1375747200,
+            "1": 1379376000,
+            "2": 1386633600,
+            "3": 1391472000,
+            "4": 1395100800,
+            "5": 1398729600,
+            "6": 1402358400,
+            "7": 1405987200,
+            "8": 1409616000,
+            "9": 1413244800,
+            DC: 1161648000,
+            tB: 1213660800,
+            EC: 1246320000,
+            FC: 1264032000,
+            I: 1300752000,
+            v: 1308614400,
+            J: 1313452800,
+            D: 1317081600,
+            E: 1317081600,
+            F: 1320710400,
+            A: 1324339200,
+            B: 1327968000,
+            C: 1331596800,
+            K: 1335225600,
+            L: 1338854400,
+            G: 1342483200,
+            M: 1346112000,
+            N: 1349740800,
+            O: 1353628800,
+            w: 1357603200,
+            g: 1361232000,
+            x: 1364860800,
+            y: 1368489600,
+            z: 1372118400,
+            AB: 1417392000,
+            BB: 1421107200,
+            CB: 1424736000,
+            DB: 1428278400,
+            EB: 1431475200,
+            FB: 1435881600,
+            GB: 1439251200,
+            HB: 1442880000,
+            IB: 1446508800,
+            JB: 1450137600,
+            KB: 1453852800,
+            LB: 1457395200,
+            MB: 1461628800,
+            NB: 1465257600,
+            OB: 1470096000,
+            PB: 1474329600,
+            QB: 1479168000,
+            RB: 1485216000,
+            SB: 1488844800,
+            TB: 1492560000,
+            UB: 1497312000,
+            VB: 1502150400,
+            WB: 1506556800,
+            XB: 1510617600,
+            YB: 1516665600,
+            uB: 1520985600,
+            ZB: 1525824000,
+            vB: 1529971200,
+            aB: 1536105600,
+            bB: 1540252800,
+            cB: 1544486400,
+            dB: 1548720000,
+            eB: 1552953600,
+            fB: 1558396800,
+            gB: 1562630400,
+            hB: 1567468800,
+            iB: 1571788800,
+            jB: 1575331200,
+            kB: 1578355200,
+            h: 1581379200,
+            lB: 1583798400,
+            mB: 1586304000,
+            nB: 1588636800,
+            oB: 1591056000,
+            pB: 1593475200,
+            P: 1595894400,
+            Q: 1598313600,
+            R: 1600732800,
+            wB: 1603152000,
+            S: 1605571200,
+            T: 1607990400,
+            U: 1611619200,
+            V: 1614038400,
+            W: 1616457600,
+            X: 1618790400,
+            Y: 1622505600,
+            Z: 1626134400,
+            a: 1628553600,
+            b: 1630972800,
+            c: 1633392000,
+            d: 1635811200,
+            e: 1638835200,
+            i: 1641859200,
+            j: 1644364800,
+            k: 1646697600,
+            l: 1649116800,
+            m: 1651536000,
+            n: 1653955200,
+            o: 1656374400,
+            p: 1658793600,
+            q: 1661212800,
+            r: 1663632000,
+            s: 1666051200,
+            t: 1668470400,
+            u: 1670889600,
+            f: 1673913600,
+            H: 1676332800,
+            xB: null,
+            yB: null
+        }
+    },
+    D: {
+        A: {
+            "0": 0.003939,
+            "1": 0.004461,
+            "2": 0.004141,
+            "3": 0.004326,
+            "4": 0.0047,
+            "5": 0.004538,
+            "6": 0.008322,
+            "7": 0.008596,
+            "8": 0.004566,
+            "9": 0.004118,
+            I: 0.004706,
+            v: 0.004879,
+            J: 0.004879,
+            D: 0.005591,
+            E: 0.005591,
+            F: 0.005591,
+            A: 0.004534,
+            B: 0.004464,
+            C: 0.010424,
+            K: 0.0083,
+            L: 0.004706,
+            G: 0.015087,
+            M: 0.004393,
+            N: 0.004393,
+            O: 0.008652,
+            w: 0.008322,
+            g: 0.004393,
+            x: 0.004317,
+            y: 0.003901,
+            z: 0.008786,
+            AB: 0.003861,
+            BB: 0.003861,
+            CB: 0.004335,
+            DB: 0.004464,
+            EB: 0.015444,
+            FB: 0.003867,
+            GB: 0.015444,
+            HB: 0.003773,
+            IB: 0.003974,
+            JB: 0.007722,
+            KB: 0.007948,
+            LB: 0.003974,
+            MB: 0.003867,
+            NB: 0.007722,
+            OB: 0.019305,
+            PB: 0.03861,
+            QB: 0.003867,
+            RB: 0.003929,
+            SB: 0.007722,
+            TB: 0.007722,
+            UB: 0.003867,
+            VB: 0.007722,
+            WB: 0.069498,
+            XB: 0.003861,
+            YB: 0.015772,
+            uB: 0.003773,
+            ZB: 0.015444,
+            vB: 0.007722,
+            aB: 0.003773,
+            bB: 0.007722,
+            cB: 0.003943,
+            dB: 0.007722,
+            eB: 0.027027,
+            fB: 0.007722,
+            gB: 0.011583,
+            hB: 0.054054,
+            iB: 0.019305,
+            jB: 0.015444,
+            kB: 0.023166,
+            h: 0.011583,
+            lB: 0.042471,
+            mB: 0.046332,
+            nB: 0.042471,
+            oB: 0.015444,
+            pB: 0.030888,
+            P: 0.127413,
+            Q: 0.03861,
+            R: 0.042471,
+            S: 0.073359,
+            T: 0.042471,
+            U: 0.088803,
+            V: 0.07722,
+            W: 0.081081,
+            X: 0.027027,
+            Y: 0.03861,
+            Z: 0.046332,
+            a: 0.084942,
+            b: 0.050193,
+            c: 0.065637,
+            d: 0.046332,
+            e: 0.019305,
+            i: 0.03861,
+            j: 0.050193,
+            k: 0.092664,
+            l: 0.050193,
+            m: 0.057915,
+            n: 0.061776,
+            o: 0.084942,
+            p: 0.235521,
+            q: 0.084942,
+            r: 0.131274,
+            s: 0.100386,
+            t: 0.19305,
+            u: 0.984555,
+            f: 12.4054,
+            H: 7.25482,
+            xB: 0.015444,
+            yB: 0.019305,
+            GC: 0
+        },
+        B: "webkit",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "I",
+            "v",
+            "J",
+            "D",
+            "E",
+            "F",
+            "A",
+            "B",
+            "C",
+            "K",
+            "L",
+            "G",
+            "M",
+            "N",
+            "O",
+            "w",
+            "g",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "AB",
+            "BB",
+            "CB",
+            "DB",
+            "EB",
+            "FB",
+            "GB",
+            "HB",
+            "IB",
+            "JB",
+            "KB",
+            "LB",
+            "MB",
+            "NB",
+            "OB",
+            "PB",
+            "QB",
+            "RB",
+            "SB",
+            "TB",
+            "UB",
+            "VB",
+            "WB",
+            "XB",
+            "YB",
+            "uB",
+            "ZB",
+            "vB",
+            "aB",
+            "bB",
+            "cB",
+            "dB",
+            "eB",
+            "fB",
+            "gB",
+            "hB",
+            "iB",
+            "jB",
+            "kB",
+            "h",
+            "lB",
+            "mB",
+            "nB",
+            "oB",
+            "pB",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "f",
+            "H",
+            "xB",
+            "yB",
+            "GC"
+        ],
+        E: "Chrome",
+        F: {
+            "0": 1352246400,
+            "1": 1357862400,
+            "2": 1361404800,
+            "3": 1364428800,
+            "4": 1369094400,
+            "5": 1374105600,
+            "6": 1376956800,
+            "7": 1384214400,
+            "8": 1389657600,
+            "9": 1392940800,
+            I: 1264377600,
+            v: 1274745600,
+            J: 1283385600,
+            D: 1287619200,
+            E: 1291248000,
+            F: 1296777600,
+            A: 1299542400,
+            B: 1303862400,
+            C: 1307404800,
+            K: 1312243200,
+            L: 1316131200,
+            G: 1316131200,
+            M: 1319500800,
+            N: 1323734400,
+            O: 1328659200,
+            w: 1332892800,
+            g: 1337040000,
+            x: 1340668800,
+            y: 1343692800,
+            z: 1348531200,
+            AB: 1397001600,
+            BB: 1400544000,
+            CB: 1405468800,
+            DB: 1409011200,
+            EB: 1412640000,
+            FB: 1416268800,
+            GB: 1421798400,
+            HB: 1425513600,
+            IB: 1429401600,
+            JB: 1432080000,
+            KB: 1437523200,
+            LB: 1441152000,
+            MB: 1444780800,
+            NB: 1449014400,
+            OB: 1453248000,
+            PB: 1456963200,
+            QB: 1460592000,
+            RB: 1464134400,
+            SB: 1469059200,
+            TB: 1472601600,
+            UB: 1476230400,
+            VB: 1480550400,
+            WB: 1485302400,
+            XB: 1489017600,
+            YB: 1492560000,
+            uB: 1496707200,
+            ZB: 1500940800,
+            vB: 1504569600,
+            aB: 1508198400,
+            bB: 1512518400,
+            cB: 1516752000,
+            dB: 1520294400,
+            eB: 1523923200,
+            fB: 1527552000,
+            gB: 1532390400,
+            hB: 1536019200,
+            iB: 1539648000,
+            jB: 1543968000,
+            kB: 1548720000,
+            h: 1552348800,
+            lB: 1555977600,
+            mB: 1559606400,
+            nB: 1564444800,
+            oB: 1568073600,
+            pB: 1571702400,
+            P: 1575936000,
+            Q: 1580860800,
+            R: 1586304000,
+            S: 1589846400,
+            T: 1594684800,
+            U: 1598313600,
+            V: 1601942400,
+            W: 1605571200,
+            X: 1611014400,
+            Y: 1614556800,
+            Z: 1618272000,
+            a: 1621987200,
+            b: 1626739200,
+            c: 1630368000,
+            d: 1632268800,
+            e: 1634601600,
+            i: 1637020800,
+            j: 1641340800,
+            k: 1643673600,
+            l: 1646092800,
+            m: 1648512000,
+            n: 1650931200,
+            o: 1653350400,
+            p: 1655769600,
+            q: 1659398400,
+            r: 1661817600,
+            s: 1664236800,
+            t: 1666656000,
+            u: 1669680000,
+            f: 1673308800,
+            H: 1675728000,
+            xB: null,
+            yB: null,
+            GC: null
+        }
+    },
+    E: {
+        A: {
+            I: 0,
+            v: 0.008322,
+            J: 0.004656,
+            D: 0.004465,
+            E: 0.003974,
+            F: 0.003929,
+            A: 0.004425,
+            B: 0.004318,
+            C: 0.003801,
+            K: 0.019305,
+            L: 0.096525,
+            G: 0.023166,
+            HC: 0,
+            zB: 0.008692,
+            IC: 0.007722,
+            JC: 0.00456,
+            KC: 0.004283,
+            LC: 0.057915,
+            "0B": 0.007802,
+            qB: 0.007722,
+            rB: 0.030888,
+            "1B": 0.169884,
+            MC: 0.258687,
+            NC: 0.042471,
+            "2B": 0.034749,
+            "3B": 0.088803,
+            "4B": 0.169884,
+            "5B": 0.857142,
+            sB: 0.088803,
+            "6B": 0.293436,
+            "7B": 0.922779,
+            "8B": 0.621621,
+            "9B": 0,
+            OC: 0
+        },
+        B: "webkit",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "HC",
+            "zB",
+            "I",
+            "v",
+            "IC",
+            "J",
+            "JC",
+            "D",
+            "KC",
+            "E",
+            "F",
+            "LC",
+            "A",
+            "0B",
+            "B",
+            "qB",
+            "C",
+            "rB",
+            "K",
+            "1B",
+            "L",
+            "MC",
+            "G",
+            "NC",
+            "2B",
+            "3B",
+            "4B",
+            "5B",
+            "sB",
+            "6B",
+            "7B",
+            "8B",
+            "9B",
+            "OC",
+            ""
+        ],
+        E: "Safari",
+        F: {
+            HC: 1205798400,
+            zB: 1226534400,
+            I: 1244419200,
+            v: 1275868800,
+            IC: 1311120000,
+            J: 1343174400,
+            JC: 1382400000,
+            D: 1382400000,
+            KC: 1410998400,
+            E: 1413417600,
+            F: 1443657600,
+            LC: 1458518400,
+            A: 1474329600,
+            "0B": 1490572800,
+            B: 1505779200,
+            qB: 1522281600,
+            C: 1537142400,
+            rB: 1553472000,
+            K: 1568851200,
+            "1B": 1585008000,
+            L: 1600214400,
+            MC: 1619395200,
+            G: 1632096000,
+            NC: 1635292800,
+            "2B": 1639353600,
+            "3B": 1647216000,
+            "4B": 1652745600,
+            "5B": 1658275200,
+            sB: 1662940800,
+            "6B": 1666569600,
+            "7B": 1670889600,
+            "8B": 1674432000,
+            "9B": null,
+            OC: null
+        }
+    },
+    F: {
+        A: {
+            "0": 0.006702,
+            "1": 0.006015,
+            "2": 0.005595,
+            "3": 0.004393,
+            "4": 0.003861,
+            "5": 0.004879,
+            "6": 0.004879,
+            "7": 0.003861,
+            "8": 0.005152,
+            "9": 0.005014,
+            F: 0.0082,
+            B: 0.016581,
+            C: 0.004317,
+            G: 0.00685,
+            M: 0.00685,
+            N: 0.00685,
+            O: 0.005014,
+            w: 0.006015,
+            g: 0.004879,
+            x: 0.006597,
+            y: 0.006597,
+            z: 0.013434,
+            AB: 0.009758,
+            BB: 0.004879,
+            CB: 0.007722,
+            DB: 0.004283,
+            EB: 0.004367,
+            FB: 0.004534,
+            GB: 0.003861,
+            HB: 0.004227,
+            IB: 0.004418,
+            JB: 0.004161,
+            KB: 0.004227,
+            LB: 0.004725,
+            MB: 0.011583,
+            NB: 0.008942,
+            OB: 0.004707,
+            PB: 0.004827,
+            QB: 0.004707,
+            RB: 0.004707,
+            SB: 0.004326,
+            TB: 0.008922,
+            UB: 0.014349,
+            VB: 0.004425,
+            WB: 0.00472,
+            XB: 0.004425,
+            YB: 0.004425,
+            ZB: 0.00472,
+            aB: 0.004532,
+            bB: 0.004566,
+            cB: 0.02283,
+            dB: 0.00867,
+            eB: 0.004656,
+            fB: 0.004642,
+            gB: 0.003929,
+            hB: 0.00944,
+            iB: 0.004293,
+            jB: 0.003929,
+            kB: 0.004298,
+            h: 0.096692,
+            lB: 0.004201,
+            mB: 0.004141,
+            nB: 0.004257,
+            oB: 0.003939,
+            pB: 0.008236,
+            P: 0.003855,
+            Q: 0.003939,
+            R: 0.008514,
+            wB: 0.003939,
+            S: 0.003939,
+            T: 0.003702,
+            U: 0.007722,
+            V: 0.003855,
+            W: 0.003855,
+            X: 0.003929,
+            Y: 0.003861,
+            Z: 0.011703,
+            a: 0.007546,
+            b: 0.011829,
+            c: 0.069498,
+            d: 0.648648,
+            e: 0.370656,
+            PC: 0.00685,
+            QC: 0,
+            RC: 0.008392,
+            SC: 0.004706,
+            qB: 0.006229,
+            AC: 0.004879,
+            TC: 0.008786,
+            rB: 0.00472
+        },
+        B: "webkit",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "F",
+            "PC",
+            "QC",
+            "RC",
+            "SC",
+            "B",
+            "qB",
+            "AC",
+            "TC",
+            "C",
+            "rB",
+            "G",
+            "M",
+            "N",
+            "O",
+            "w",
+            "g",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "AB",
+            "BB",
+            "CB",
+            "DB",
+            "EB",
+            "FB",
+            "GB",
+            "HB",
+            "IB",
+            "JB",
+            "KB",
+            "LB",
+            "MB",
+            "NB",
+            "OB",
+            "PB",
+            "QB",
+            "RB",
+            "SB",
+            "TB",
+            "UB",
+            "VB",
+            "WB",
+            "XB",
+            "YB",
+            "ZB",
+            "aB",
+            "bB",
+            "cB",
+            "dB",
+            "eB",
+            "fB",
+            "gB",
+            "hB",
+            "iB",
+            "jB",
+            "kB",
+            "h",
+            "lB",
+            "mB",
+            "nB",
+            "oB",
+            "pB",
+            "P",
+            "Q",
+            "R",
+            "wB",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "",
+            "",
+            ""
+        ],
+        E: "Opera",
+        F: {
+            "0": 1409616000,
+            "1": 1413331200,
+            "2": 1417132800,
+            "3": 1422316800,
+            "4": 1425945600,
+            "5": 1430179200,
+            "6": 1433808000,
+            "7": 1438646400,
+            "8": 1442448000,
+            "9": 1445904000,
+            F: 1150761600,
+            PC: 1223424000,
+            QC: 1251763200,
+            RC: 1267488000,
+            SC: 1277942400,
+            B: 1292457600,
+            qB: 1302566400,
+            AC: 1309219200,
+            TC: 1323129600,
+            C: 1323129600,
+            rB: 1352073600,
+            G: 1372723200,
+            M: 1377561600,
+            N: 1381104000,
+            O: 1386288000,
+            w: 1390867200,
+            g: 1393891200,
+            x: 1399334400,
+            y: 1401753600,
+            z: 1405987200,
+            AB: 1449100800,
+            BB: 1454371200,
+            CB: 1457308800,
+            DB: 1462320000,
+            EB: 1465344000,
+            FB: 1470096000,
+            GB: 1474329600,
+            HB: 1477267200,
+            IB: 1481587200,
+            JB: 1486425600,
+            KB: 1490054400,
+            LB: 1494374400,
+            MB: 1498003200,
+            NB: 1502236800,
+            OB: 1506470400,
+            PB: 1510099200,
+            QB: 1515024000,
+            RB: 1517961600,
+            SB: 1521676800,
+            TB: 1525910400,
+            UB: 1530144000,
+            VB: 1534982400,
+            WB: 1537833600,
+            XB: 1543363200,
+            YB: 1548201600,
+            ZB: 1554768000,
+            aB: 1561593600,
+            bB: 1566259200,
+            cB: 1570406400,
+            dB: 1573689600,
+            eB: 1578441600,
+            fB: 1583971200,
+            gB: 1587513600,
+            hB: 1592956800,
+            iB: 1595894400,
+            jB: 1600128000,
+            kB: 1603238400,
+            h: 1613520000,
+            lB: 1612224000,
+            mB: 1616544000,
+            nB: 1619568000,
+            oB: 1623715200,
+            pB: 1627948800,
+            P: 1631577600,
+            Q: 1633392000,
+            R: 1635984000,
+            wB: 1638403200,
+            S: 1642550400,
+            T: 1644969600,
+            U: 1647993600,
+            V: 1650412800,
+            W: 1652745600,
+            X: 1654646400,
+            Y: 1657152000,
+            Z: 1660780800,
+            a: 1663113600,
+            b: 1668816000,
+            c: 1668643200,
+            d: 1671062400,
+            e: 1675209600
+        },
+        D: {
+            F: "o",
+            B: "o",
+            C: "o",
+            PC: "o",
+            QC: "o",
+            RC: "o",
+            SC: "o",
+            qB: "o",
+            AC: "o",
+            TC: "o",
+            rB: "o"
+        }
+    },
+    G: {
+        A: {
+            E: 0,
+            zB: 0,
+            UC: 0,
+            BC: 0.00156679,
+            VC: 0.00313358,
+            WC: 0.00313358,
+            XC: 0.0125343,
+            YC: 0.00626717,
+            ZC: 0.0172347,
+            aC: 0.0564045,
+            bC: 0.00470038,
+            cC: 0.0987079,
+            dC: 0.0250687,
+            eC: 0.0235019,
+            fC: 0.0219351,
+            gC: 0.394832,
+            hC: 0.0156679,
+            iC: 0.0360362,
+            jC: 0.0344694,
+            kC: 0.108109,
+            lC: 0.282023,
+            mC: 0.532709,
+            nC: 0.153546,
+            "2B": 0.195849,
+            "3B": 0.233452,
+            "4B": 0.412066,
+            "5B": 1.40071,
+            sB: 1.43988,
+            "6B": 3.51431,
+            "7B": 3.62556,
+            "8B": 2.04623,
+            "9B": 0.00940075
+        },
+        B: "webkit",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "zB",
+            "UC",
+            "BC",
+            "VC",
+            "WC",
+            "XC",
+            "E",
+            "YC",
+            "ZC",
+            "aC",
+            "bC",
+            "cC",
+            "dC",
+            "eC",
+            "fC",
+            "gC",
+            "hC",
+            "iC",
+            "jC",
+            "kC",
+            "lC",
+            "mC",
+            "nC",
+            "2B",
+            "3B",
+            "4B",
+            "5B",
+            "sB",
+            "6B",
+            "7B",
+            "8B",
+            "9B",
+            "",
+            ""
+        ],
+        E: "Safari on iOS",
+        F: {
+            zB: 1270252800,
+            UC: 1283904000,
+            BC: 1299628800,
+            VC: 1331078400,
+            WC: 1359331200,
+            XC: 1394409600,
+            E: 1410912000,
+            YC: 1413763200,
+            ZC: 1442361600,
+            aC: 1458518400,
+            bC: 1473724800,
+            cC: 1490572800,
+            dC: 1505779200,
+            eC: 1522281600,
+            fC: 1537142400,
+            gC: 1553472000,
+            hC: 1568851200,
+            iC: 1572220800,
+            jC: 1580169600,
+            kC: 1585008000,
+            lC: 1600214400,
+            mC: 1619395200,
+            nC: 1632096000,
+            "2B": 1639353600,
+            "3B": 1647216000,
+            "4B": 1652659200,
+            "5B": 1658275200,
+            sB: 1662940800,
+            "6B": 1666569600,
+            "7B": 1670889600,
+            "8B": 1674432000,
+            "9B": null
+        }
+    },
+    H: {
+        A: {
+            oC: 0.993853
+        },
+        B: "o",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "oC",
+            "",
+            "",
+            ""
+        ],
+        E: "Opera Mini",
+        F: {
+            oC: 1426464000
+        }
+    },
+    I: {
+        A: {
+            tB: 0,
+            I: 0.019696,
+            f: 0,
+            pC: 0,
+            qC: 0,
+            rC: 0,
+            sC: 0.0787838,
+            BC: 0.0689359,
+            tC: 0,
+            uC: 0.305287
+        },
+        B: "webkit",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "pC",
+            "qC",
+            "rC",
+            "tB",
+            "I",
+            "sC",
+            "BC",
+            "tC",
+            "uC",
+            "f",
+            "",
+            "",
+            ""
+        ],
+        E: "Android Browser",
+        F: {
+            pC: 1256515200,
+            qC: 1274313600,
+            rC: 1291593600,
+            tB: 1298332800,
+            I: 1318896000,
+            sC: 1341792000,
+            BC: 1374624000,
+            tC: 1386547200,
+            uC: 1401667200,
+            f: 1673568000
+        }
+    },
+    J: {
+        A: {
+            D: 0,
+            A: 0
+        },
+        B: "webkit",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "D",
+            "A",
+            "",
+            "",
+            ""
+        ],
+        E: "Blackberry Browser",
+        F: {
+            D: 1325376000,
+            A: 1359504000
+        }
+    },
+    K: {
+        A: {
+            A: 0,
+            B: 0,
+            C: 0,
+            h: 0.0111391,
+            qB: 0,
+            AC: 0,
+            rB: 0
+        },
+        B: "o",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "A",
+            "B",
+            "qB",
+            "AC",
+            "C",
+            "rB",
+            "h",
+            "",
+            "",
+            ""
+        ],
+        E: "Opera Mobile",
+        F: {
+            A: 1287100800,
+            B: 1300752000,
+            qB: 1314835200,
+            AC: 1318291200,
+            C: 1330300800,
+            rB: 1349740800,
+            h: 1673827200
+        },
+        D: {
+            h: "webkit"
+        }
+    },
+    L: {
+        A: {
+            H: 42.629
+        },
+        B: "webkit",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "H",
+            "",
+            "",
+            ""
+        ],
+        E: "Chrome for Android",
+        F: {
+            H: 1675728000
+        }
+    },
+    M: {
+        A: {
+            H: 0.294672
+        },
+        B: "moz",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "H",
+            "",
+            "",
+            ""
+        ],
+        E: "Firefox for Android",
+        F: {
+            H: 1676332800
+        }
+    },
+    N: {
+        A: {
+            A: 0.0115934,
+            B: 0.022664
+        },
+        B: "ms",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "A",
+            "B",
+            "",
+            "",
+            ""
+        ],
+        E: "IE Mobile",
+        F: {
+            A: 1340150400,
+            B: 1353456000
+        }
+    },
+    O: {
+        A: {
+            vC: 0.896294
+        },
+        B: "webkit",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "vC",
+            "",
+            "",
+            ""
+        ],
+        E: "UC Browser for Android",
+        F: {
+            vC: 1634688000
+        },
+        D: {
+            vC: "webkit"
+        }
+    },
+    P: {
+        A: {
+            I: 0.166372,
+            g: 0,
+            wC: 0.0103543,
+            xC: 0.010304,
+            yC: 0.0519911,
+            zC: 0.0103584,
+            "0C": 0.0104443,
+            "0B": 0.0105043,
+            "1C": 0.0311947,
+            "2C": 0.0103982,
+            "3C": 0.0311947,
+            "4C": 0.0311947,
+            "5C": 0.0207965,
+            sB: 0.0727876,
+            "6C": 0.0727876,
+            "7C": 0.0935841,
+            "8C": 1.32057
+        },
+        B: "webkit",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "I",
+            "wC",
+            "xC",
+            "yC",
+            "zC",
+            "0C",
+            "0B",
+            "1C",
+            "2C",
+            "3C",
+            "4C",
+            "5C",
+            "sB",
+            "6C",
+            "7C",
+            "8C",
+            "g",
+            "",
+            "",
+            ""
+        ],
+        E: "Samsung Internet",
+        F: {
+            I: 1461024000,
+            wC: 1481846400,
+            xC: 1509408000,
+            yC: 1528329600,
+            zC: 1546128000,
+            "0C": 1554163200,
+            "0B": 1567900800,
+            "1C": 1582588800,
+            "2C": 1593475200,
+            "3C": 1605657600,
+            "4C": 1618531200,
+            "5C": 1629072000,
+            sB: 1640736000,
+            "6C": 1651708800,
+            "7C": 1659657600,
+            "8C": 1667260800,
+            g: 1677369600
+        }
+    },
+    Q: {
+        A: {
+            "1B": 0.12278
+        },
+        B: "webkit",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "1B",
+            "",
+            "",
+            ""
+        ],
+        E: "QQ Browser",
+        F: {
+            "1B": 1663718400
+        }
+    },
+    R: {
+        A: {
+            "9C": 0
+        },
+        B: "webkit",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "9C",
+            "",
+            "",
+            ""
+        ],
+        E: "Baidu Browser",
+        F: {
+            "9C": 1663027200
+        }
+    },
+    S: {
+        A: {
+            AD: 0.079807,
+            BD: 0
+        },
+        B: "moz",
+        C: [
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "AD",
+            "BD",
+            "",
+            "",
+            ""
+        ],
+        E: "KaiOS Browser",
+        F: {
+            AD: 1527811200,
+            BD: 1631664000
+        }
+    }
+};
+
+},{}],"b7Kzh":[function(require,module,exports) {
+module.exports = JSON.parse('{"v0.8":{"start":"2012-06-25","end":"2014-07-31"},"v0.10":{"start":"2013-03-11","end":"2016-10-31"},"v0.12":{"start":"2015-02-06","end":"2016-12-31"},"v4":{"start":"2015-09-08","lts":"2015-10-12","maintenance":"2017-04-01","end":"2018-04-30","codename":"Argon"},"v5":{"start":"2015-10-29","maintenance":"2016-04-30","end":"2016-06-30"},"v6":{"start":"2016-04-26","lts":"2016-10-18","maintenance":"2018-04-30","end":"2019-04-30","codename":"Boron"},"v7":{"start":"2016-10-25","maintenance":"2017-04-30","end":"2017-06-30"},"v8":{"start":"2017-05-30","lts":"2017-10-31","maintenance":"2019-01-01","end":"2019-12-31","codename":"Carbon"},"v9":{"start":"2017-10-01","maintenance":"2018-04-01","end":"2018-06-30"},"v10":{"start":"2018-04-24","lts":"2018-10-30","maintenance":"2020-05-19","end":"2021-04-30","codename":"Dubnium"},"v11":{"start":"2018-10-23","maintenance":"2019-04-22","end":"2019-06-01"},"v12":{"start":"2019-04-23","lts":"2019-10-21","maintenance":"2020-11-30","end":"2022-04-30","codename":"Erbium"},"v13":{"start":"2019-10-22","maintenance":"2020-04-01","end":"2020-06-01"},"v14":{"start":"2020-04-21","lts":"2020-10-27","maintenance":"2021-10-19","end":"2023-04-30","codename":"Fermium"},"v15":{"start":"2020-10-20","maintenance":"2021-04-01","end":"2021-06-01"},"v16":{"start":"2021-04-20","lts":"2021-10-26","maintenance":"2022-10-18","end":"2023-09-11","codename":"Gallium"},"v17":{"start":"2021-10-19","maintenance":"2022-04-01","end":"2022-06-01"},"v18":{"start":"2022-04-19","lts":"2022-10-25","maintenance":"2023-10-18","end":"2025-04-30","codename":"Hydrogen"},"v19":{"start":"2022-10-18","maintenance":"2023-04-01","end":"2023-06-01"},"v20":{"start":"2023-04-18","lts":"2023-10-24","maintenance":"2024-10-22","end":"2026-04-30","codename":""}}');
+
+},{}],"jhUEF":[function(require,module,exports) {
+"use strict";
+
+},{}],"i95xm":[function(require,module,exports) {
+module.exports = {
+    "0.20": "39",
+    "0.21": "41",
+    "0.22": "41",
+    "0.23": "41",
+    "0.24": "41",
+    "0.25": "42",
+    "0.26": "42",
+    "0.27": "43",
+    "0.28": "43",
+    "0.29": "43",
+    "0.30": "44",
+    "0.31": "45",
+    "0.32": "45",
+    "0.33": "45",
+    "0.34": "45",
+    "0.35": "45",
+    "0.36": "47",
+    "0.37": "49",
+    "1.0": "49",
+    "1.1": "50",
+    "1.2": "51",
+    "1.3": "52",
+    "1.4": "53",
+    "1.5": "54",
+    "1.6": "56",
+    "1.7": "58",
+    "1.8": "59",
+    "2.0": "61",
+    "2.1": "61",
+    "3.0": "66",
+    "3.1": "66",
+    "4.0": "69",
+    "4.1": "69",
+    "4.2": "69",
+    "5.0": "73",
+    "6.0": "76",
+    "6.1": "76",
+    "7.0": "78",
+    "7.1": "78",
+    "7.2": "78",
+    "7.3": "78",
+    "8.0": "80",
+    "8.1": "80",
+    "8.2": "80",
+    "8.3": "80",
+    "8.4": "80",
+    "8.5": "80",
+    "9.0": "83",
+    "9.1": "83",
+    "9.2": "83",
+    "9.3": "83",
+    "9.4": "83",
+    "10.0": "85",
+    "10.1": "85",
+    "10.2": "85",
+    "10.3": "85",
+    "10.4": "85",
+    "11.0": "87",
+    "11.1": "87",
+    "11.2": "87",
+    "11.3": "87",
+    "11.4": "87",
+    "11.5": "87",
+    "12.0": "89",
+    "12.1": "89",
+    "12.2": "89",
+    "13.0": "91",
+    "13.1": "91",
+    "13.2": "91",
+    "13.3": "91",
+    "13.4": "91",
+    "13.5": "91",
+    "13.6": "91",
+    "14.0": "93",
+    "14.1": "93",
+    "14.2": "93",
+    "15.0": "94",
+    "15.1": "94",
+    "15.2": "94",
+    "15.3": "94",
+    "15.4": "94",
+    "15.5": "94",
+    "16.0": "96",
+    "16.1": "96",
+    "16.2": "96",
+    "17.0": "98",
+    "17.1": "98",
+    "17.2": "98",
+    "17.3": "98",
+    "17.4": "98",
+    "18.0": "100",
+    "18.1": "100",
+    "18.2": "100",
+    "18.3": "100",
+    "19.0": "102",
+    "19.1": "102",
+    "20.0": "104",
+    "20.1": "104",
+    "20.2": "104",
+    "20.3": "104",
+    "21.0": "106",
+    "21.1": "106",
+    "21.2": "106",
+    "21.3": "106",
+    "21.4": "106",
+    "22.0": "108",
+    "22.1": "108",
+    "22.2": "108",
+    "22.3": "108",
+    "23.0": "110",
+    "23.1": "110",
+    "24.0": "111"
+};
+
+},{}],"4GzM4":[function(require,module,exports) {
+function BrowserslistError(message) {
+    this.name = "BrowserslistError";
+    this.message = message;
+    this.browserslist = true;
+    if (Error.captureStackTrace) Error.captureStackTrace(this, BrowserslistError);
+}
+BrowserslistError.prototype = Error.prototype;
+module.exports = BrowserslistError;
+
+},{}],"a4Lkh":[function(require,module,exports) {
+var AND_REGEXP = /^\s+and\s+(.*)/i;
+var OR_REGEXP = /^(?:,\s*|\s+or\s+)(.*)/i;
+function flatten(array) {
+    if (!Array.isArray(array)) return [
+        array
+    ];
+    return array.reduce(function(a, b) {
+        return a.concat(flatten(b));
+    }, []);
+}
+function find(string, predicate) {
+    for(var n = 1, max = string.length; n <= max; n++){
+        var parsed = string.substr(-n, n);
+        if (predicate(parsed, n, max)) return string.slice(0, -n);
+    }
+    return "";
+}
+function matchQuery(all, query) {
+    var node = {
+        query: query
+    };
+    if (query.indexOf("not ") === 0) {
+        node.not = true;
+        query = query.slice(4);
+    }
+    for(var name in all){
+        var type = all[name];
+        var match = query.match(type.regexp);
+        if (match) {
+            node.type = name;
+            for(var i = 0; i < type.matches.length; i++)node[type.matches[i]] = match[i + 1];
+            return node;
+        }
+    }
+    node.type = "unknown";
+    return node;
+}
+function matchBlock(all, string, qs) {
+    var node;
+    return find(string, function(parsed, n, max) {
+        if (AND_REGEXP.test(parsed)) {
+            node = matchQuery(all, parsed.match(AND_REGEXP)[1]);
+            node.compose = "and";
+            qs.unshift(node);
+            return true;
+        } else if (OR_REGEXP.test(parsed)) {
+            node = matchQuery(all, parsed.match(OR_REGEXP)[1]);
+            node.compose = "or";
+            qs.unshift(node);
+            return true;
+        } else if (n === max) {
+            node = matchQuery(all, parsed.trim());
+            node.compose = "or";
+            qs.unshift(node);
+            return true;
+        }
+        return false;
+    });
+}
+module.exports = function parse(all, queries) {
+    if (!Array.isArray(queries)) queries = [
+        queries
+    ];
+    return flatten(queries.map(function(block) {
+        var qs = [];
+        do block = matchBlock(all, block, qs);
+        while (block);
+        return qs;
+    }));
+};
+
+},{}],"hteYL":[function(require,module,exports) {
+var BrowserslistError = require("b896a2ba7d864b46");
+function noop() {}
+module.exports = {
+    loadQueries: function loadQueries() {
+        throw new BrowserslistError("Sharable configs are not supported in client-side build of Browserslist");
+    },
+    getStat: function getStat(opts) {
+        return opts.stats;
+    },
+    loadConfig: function loadConfig(opts) {
+        if (opts.config) throw new BrowserslistError("Browserslist config are not supported in client-side build");
+    },
+    loadCountry: function loadCountry() {
+        throw new BrowserslistError("Country statistics are not supported in client-side build of Browserslist");
+    },
+    loadFeature: function loadFeature() {
+        throw new BrowserslistError("Supports queries are not available in client-side build of Browserslist");
+    },
+    currentNode: function currentNode(resolve, context) {
+        return resolve([
+            "maintained node versions"
+        ], context)[0];
+    },
+    parseConfig: noop,
+    readConfig: noop,
+    findConfig: noop,
+    clearCaches: noop,
+    oldDataWarning: noop,
+    env: {}
+};
+
+},{"b896a2ba7d864b46":"4GzM4"}]},["d8XZh","aenu9"], "aenu9", "parcelRequire3a11")
 
 //# sourceMappingURL=index.e37f48ea.js.map
